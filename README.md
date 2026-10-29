@@ -2,6 +2,16 @@
 
 DIY diagnostic tool for the Gen 1 KTM 390 Duke (2013–2016), built on an ESP32-WROOM-32E with an SN65HVD230 CAN transceiver.
 
+## Download
+
+| | |
+|---|---|
+| 📱 **Android app** | [**obduke-app.apk**](https://github.com/lab-vex/obduke/releases/latest/download/obduke-app.apk) |
+| 🔧 **Firmware (fresh flash)** | [**obduke-firmware-full.bin**](https://github.com/lab-vex/obduke/releases/latest/download/obduke-firmware-full.bin), flash at `0x0` |
+| 🔁 **Firmware (update)** | [**obduke-firmware.bin**](https://github.com/lab-vex/obduke/releases/latest/download/obduke-firmware.bin), flash at `0x10000` over an existing install |
+
+These links always point to the [latest release](https://github.com/lab-vex/obduke/releases/latest). On your phone, tap the APK link and allow your browser to install unknown apps. After that, the app updates itself.
+
 One unit, three ways in:
 
 | Link | Used by | How |
@@ -24,12 +34,12 @@ OBDuke/
   .github/workflows/ automatic builds and releases
 ```
 
-## Downloads (no Android Studio needed)
+## Build outputs (no Android Studio needed)
 
 Every push to GitHub builds everything automatically:
 
 - **Latest build:** repo **Actions** tab → newest *Build* run → **Artifacts** at the bottom: `obduke-app` (the APK) and `obduke-firmware`.
-- **Releases:** bump `versionName` in `android/app/build.gradle.kts`, then push a matching tag (`git tag v1.2.1 && git push --tags`). The APK and firmware appear under **Releases**, ready to download on your phone.
+- **Releases:** bump `versionName` in `android/app/build.gradle.kts`, push, and wait for a green Build. Then publish a release on GitHub (**Releases → Draft a new release**, new tag `v<versionName>` on `main`). The APK and firmware are attached to the release automatically, and the download links above pick them up.
 
 Firmware files:
 - `obduke-firmware-full.bin`: flash at address `0x0` with any ESP flasher (e.g. the Espressif web flasher or `esptool.py write_flash 0x0 obduke-firmware-full.bin`). Includes the Huge APP partition table.
@@ -116,7 +126,7 @@ Requires Android 8 or newer.
 **Updates:** on launch the app checks this repo's latest GitHub Release and offers to update if it's newer (turn this off, or tap *Check now*, in **App updates** on the Connect screen or the Settings tab). It downloads `obduke-app.apk` from the release and opens Android's installer; the first time, Android asks you to allow OBDuke to install apps.
 
 - If the repo is ever made private, the app needs a fine-grained GitHub token with **Contents: Read-only** on this repo, pasted into *App updates > GitHub token*.
-- To publish an update: bump `versionName` in `android/app/build.gradle.kts`, commit, then `git tag v<version> && git push --tags`. The release build refuses a tag that doesn't match `versionName`.
+- To publish an update: bump `versionName` in `android/app/build.gradle.kts`, push, wait for a green Build, then publish a GitHub Release with tag `v<versionName>`. The release build refuses a tag that doesn't match `versionName`.
 - Release builds are signed with a permanent key kept in the repo secrets `OBDUKE_KEYSTORE_B64` and `OBDUKE_KEYSTORE_PASSWORD` (keep your own backup of it: if it's lost, every install has to be uninstalled once). A release tag fails to build if those secrets are missing. Anything installed before that (1.2.0 or older) was signed with a throwaway key, so uninstall it once and install 1.2.1 from Releases; from then on it updates itself.
 
 Password fields have an eye button to show what you've typed.
