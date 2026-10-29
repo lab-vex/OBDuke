@@ -23,4 +23,3 @@ firmware/**/build/
 .DS_Store
 Thumbs.db
 .vscode/
-!android/signing/*.jks

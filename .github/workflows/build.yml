@@ -75,7 +75,10 @@ jobs:
             echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/obduke.jks"
             echo "OBDUKE_KEYSTORE=$RUNNER_TEMP/obduke.jks" >> "$GITHUB_ENV"
           else
-            echo "No signing secret: using android/signing/obduke-release.jks"
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::Repo secret OBDUKE_KEYSTORE_B64 isn't set, so a release can't be signed"; exit 1
+            fi
+            echo "::warning::No signing secret: this APK uses a throwaway debug key and can't update a release install"
           fi
 
       - name: Tag matches app version
@@ -97,7 +100,7 @@ jobs:
       - name: Show build errors
         if: failure()
         run: |
-          grep -E "^e: |What went wrong|^> |Execution failed|password|keystore" "$RUNNER_TEMP/gradle.log" \
+          grep -E "^e: |What went wrong|^> |Execution failed|keystore" "$RUNNER_TEMP/gradle.log" \
             | head -25 | while IFS= read -r l; do echo "::error::$l"; done
 
       - name: Name the APK

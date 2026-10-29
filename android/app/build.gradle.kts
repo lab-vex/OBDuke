@@ -19,22 +19,17 @@ android {
     }
 
     // One permanent key for every build, so in-app updates install over the top.
-    // Taken from the OBDUKE_KEYSTORE env var (CI secret) if set, else android/signing/.
-    // See android/signing/README.md. Without either, falls back to the debug key.
-    val repoKs = rootProject.file("signing/obduke-release.jks")
-    val ksProps = java.util.Properties().apply {
-        rootProject.file("signing/keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-    }
-    // CI passes "" for a secret that isn't set, so treat blank env vars as missing
+    // CI writes it from the repo secrets OBDUKE_KEYSTORE_B64 / OBDUKE_KEYSTORE_PASSWORD.
+    // Without them (local builds, forks) the debug key is used, and that APK can't update a release install.
+    // CI passes "" for a secret that isn't set, so blank env vars count as missing.
     fun env(name: String) = System.getenv(name)?.takeIf { it.isNotBlank() }
     val ks = env("OBDUKE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
-        ?: repoKs.takeIf { it.exists() }
     signingConfigs {
         if (ks != null) create("obduke") {
             storeFile = ks
-            storePassword = env("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("storePassword")
-            keyAlias = ksProps.getProperty("keyAlias") ?: "obduke"
-            keyPassword = env("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("keyPassword")
+            storePassword = env("OBDUKE_KEYSTORE_PASSWORD")
+            keyAlias = "obduke"
+            keyPassword = env("OBDUKE_KEYSTORE_PASSWORD")
         }
     }
     val signer = if (ks != null) signingConfigs.getByName("obduke") else signingConfigs.getByName("debug")
