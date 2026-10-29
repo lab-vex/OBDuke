@@ -3,6 +3,9 @@ package au.obduke.app
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -129,8 +132,7 @@ fun PasswordField(
         trailingIcon = {
             IconButton({ shown = !shown }) {
                 Icon(
-                    if (shown) androidx.compose.material.icons.Icons.Filled.VisibilityOff
-                        else androidx.compose.material.icons.Icons.Filled.Visibility,
+                    if (shown) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                     contentDescription = if (shown) "Hide password" else "Show password",
                     tint = if (shown) C.Orange else C.Muted
                 )
