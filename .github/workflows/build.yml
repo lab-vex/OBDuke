@@ -66,8 +66,29 @@ jobs:
         with:
           gradle-version: "8.7"
 
+      # Every build is signed with the same permanent key so the app can update itself.
+      - name: Signing key
+        env:
+          KS_B64: ${{ secrets.OBDUKE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/obduke.jks"
+            echo "OBDUKE_KEYSTORE=$RUNNER_TEMP/obduke.jks" >> "$GITHUB_ENV"
+          else
+            echo "No signing secret: using android/signing/obduke-release.jks"
+          fi
+
+      - name: Tag matches app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          app=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)
+          tag="${GITHUB_REF_NAME#v}"
+          [ "$app" = "$tag" ] || { echo "::error::Tag $GITHUB_REF_NAME but app versionName is $app"; exit 1; }
+
       - name: Build APK
         working-directory: android
+        env:
+          OBDUKE_KEYSTORE_PASSWORD: ${{ secrets.OBDUKE_KEYSTORE_PASSWORD }}
         run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Name the APK

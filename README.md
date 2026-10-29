@@ -29,7 +29,7 @@ OBDuke/
 Every push to GitHub builds everything automatically:
 
 - **Latest build:** repo **Actions** tab → newest *Build* run → **Artifacts** at the bottom: `obduke-app` (the APK) and `obduke-firmware`.
-- **Releases:** push a version tag (`git tag v1.2.0 && git push --tags`). The APK and firmware appear under **Releases**, ready to download on your phone.
+- **Releases:** bump `versionName` in `android/app/build.gradle.kts`, then push a matching tag (`git tag v1.2.1 && git push --tags`). The APK and firmware appear under **Releases**, ready to download on your phone.
 
 Firmware files:
 - `obduke-firmware-full.bin`: flash at address `0x0` with any ESP flasher (e.g. the Espressif web flasher or `esptool.py write_flash 0x0 obduke-firmware-full.bin`). Includes the Huge APP partition table.
@@ -112,6 +112,14 @@ The app only sends its own traffic through the OBDuke hotspot, so mobile data ke
 If you set a web login on the unit, the app asks for it once and remembers it.
 
 Requires Android 8 or newer.
+
+**Updates:** on launch the app checks this repo's latest GitHub Release and offers to update if it's newer (turn this off, or tap *Check now*, in **App updates** on the Connect screen or the Settings tab). It downloads `obduke-app.apk` from the release and opens Android's installer; the first time, Android asks you to allow OBDuke to install apps.
+
+- While the repo is private, the app needs a GitHub token to see releases: create a fine-grained token (GitHub > Settings > Developer settings > Fine-grained tokens) for this repo only with **Contents: Read-only**, and paste it into *App updates > GitHub token*. A public repo needs no token.
+- To publish an update: bump `versionName` in `android/app/build.gradle.kts`, commit, then `git tag v<version> && git push --tags`. The release build refuses a tag that doesn't match `versionName`.
+- All builds from 1.2.1 on are signed with the permanent key in `android/signing/`. Anything installed before that (1.2.0 or older) was signed with a throwaway key, so uninstall it once and install 1.2.1 from Releases; from then on it updates itself.
+
+Password fields have an eye button to show what you've typed.
 
 ---
 

@@ -12,15 +12,36 @@ android {
         applicationId = "au.obduke.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        // Only versionName needs bumping: versionCode is worked out from it (1.2.1 -> 10201),
+        // so every release can install over the last one.
+        versionName = "1.2.1"
+        versionCode = versionName!!.split(".").map { it.toInt() }.let { (a, b, c) -> a * 10000 + b * 100 + c }
     }
 
+    // One permanent key for every build, so in-app updates install over the top.
+    // Taken from the OBDUKE_KEYSTORE env var (CI secret) if set, else android/signing/.
+    // See android/signing/README.md. Without either, falls back to the debug key.
+    val repoKs = rootProject.file("signing/obduke-release.jks")
+    val ksProps = java.util.Properties().apply {
+        rootProject.file("signing/keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
+    val ks = System.getenv("OBDUKE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+        ?: repoKs.takeIf { it.exists() }
+    signingConfigs {
+        if (ks != null) create("obduke") {
+            storeFile = ks
+            storePassword = System.getenv("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("storePassword")
+            keyAlias = ksProps.getProperty("keyAlias") ?: "obduke"
+            keyPassword = System.getenv("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("keyPassword")
+        }
+    }
+    val signer = if (ks != null) signingConfigs.getByName("obduke") else signingConfigs.getByName("debug")
+
     buildTypes {
+        debug { signingConfig = signer }
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so "Build APK" gives an installable file straight away
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signer
         }
     }
     compileOptions {
@@ -28,7 +49,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 
 dependencies {

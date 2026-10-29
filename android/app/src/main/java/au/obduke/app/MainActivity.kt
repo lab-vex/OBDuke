@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -73,6 +72,7 @@ class MainActivity : ComponentActivity() {
         }
         vm.btPermissionResult(hasBtPerm())
         if (savedInstanceState == null) {
+            vm.checkForUpdate(manual = false)
             if (vm.transport.value == "bt" && !hasBtPerm()) askBt()
             else vm.tryAutoConnect()
         }
@@ -83,6 +83,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // back from the phone's Bluetooth settings: pick up a newly paired unit
         vm.btPermissionResult(hasBtPerm())
+        // back from "Install unknown apps": carry on with a pending update
+        vm.onAppResumed()
     }
 
     @Composable
@@ -147,6 +149,7 @@ class MainActivity : ComponentActivity() {
         }
 
         if (vm.needLogin.value) LoginDialog()
+        UpdateDialogs(vm)
     }
 
     @Composable
@@ -176,10 +179,7 @@ class MainActivity : ComponentActivity() {
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(user, { user = it }, label = { Text("User") }, singleLine = true)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        pass, { pass = it }, label = { Text("Password") }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation()
-                    )
+                    PasswordField(pass, { pass = it }, "Password")
                 }
             },
             confirmButton = { TextButton({ vm.login(user, pass) }) { Text("LOG IN", color = C.Orange, fontWeight = FontWeight.ExtraBold) } },

@@ -3,6 +3,8 @@ package au.obduke.app
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -106,4 +108,35 @@ fun KButton(
     ) {
         Text(text.uppercase(), fontWeight = FontWeight.ExtraBold, fontStyle = FontStyle.Italic, letterSpacing = 0.5.sp)
     }
+}
+
+/** Text field for passwords, with an eye button to show / hide what's typed */
+@Composable
+fun PasswordField(
+    value: String, onValueChange: (String) -> Unit, label: String,
+    modifier: Modifier = Modifier, placeholder: String? = null
+) {
+    var shown by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    OutlinedTextField(
+        value, onValueChange, label = { Text(label) }, singleLine = true,
+        placeholder = if (placeholder != null) { { Text(placeholder) } } else null,
+        visualTransformation = if (shown) androidx.compose.ui.text.input.VisualTransformation.None
+            else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = if (shown) androidx.compose.ui.text.input.KeyboardType.Text
+                else androidx.compose.ui.text.input.KeyboardType.Password,
+            autoCorrect = false
+        ),
+        trailingIcon = {
+            IconButton({ shown = !shown }) {
+                Icon(
+                    if (shown) androidx.compose.material.icons.Icons.Filled.VisibilityOff
+                        else androidx.compose.material.icons.Icons.Filled.Visibility,
+                    contentDescription = if (shown) "Hide password" else "Show password",
+                    tint = if (shown) C.Orange else C.Muted
+                )
+            }
+        },
+        modifier = modifier
+    )
 }

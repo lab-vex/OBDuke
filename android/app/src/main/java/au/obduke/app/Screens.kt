@@ -26,7 +26,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
@@ -118,25 +117,21 @@ fun ConnectScreen(vm: ObdukeViewModel, onAskBt: () -> Unit, onBtSettings: () -> 
             CardBox {
                 OutlinedTextField(vm.ssid.value, { vm.ssid.value = it }, label = { Text("Wi-Fi name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    vm.wifiPass.value, { vm.wifiPass.value = it }, label = { Text("Wi-Fi password") }, singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth()
-                )
+                PasswordField(vm.wifiPass.value, { vm.wifiPass.value = it }, "Wi-Fi password", Modifier.fillMaxWidth())
                 TextButton({ showAdv = !showAdv }) { Text(if (showAdv) "Hide advanced" else "Advanced", color = C.Orange) }
                 if (showAdv) {
                     OutlinedTextField(vm.host.value, { vm.host.value = it }, label = { Text("Address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(vm.webUser.value, { vm.webUser.value = it }, label = { Text("Web login user") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        vm.webPass.value, { vm.webPass.value = it }, label = { Text("Web login password (if set)") }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth()
-                    )
+                    PasswordField(vm.webPass.value, { vm.webPass.value = it }, "Web login password (if set)", Modifier.fillMaxWidth())
                     Text("Address is 1.1.1.1 on the hotspot (192.168.4.1 on firmware 1.0 — the app finds either). On home Wi-Fi use the IP shown in the unit's Settings > About.",
                         color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
+        UpdatesCard(vm)
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -603,6 +598,7 @@ fun SettingsScreen(vm: ObdukeViewModel) {
             Spacer(Modifier.height(8.dp))
             KButton("Disconnect", { vm.disconnect() })
         }
+        UpdatesCard(vm)
 
         var group = ""
         vm.fields.forEach { f ->
@@ -645,7 +641,7 @@ fun SettingsScreen(vm: ObdukeViewModel) {
             KV("Home Wi-Fi IP", s.optString("sta_ip").ifEmpty { "—" })
             KV("Uptime", "${s.optLong("uptime") / 60} min")
             KV("Free memory", "${s.optLong("heap") / 1024} KB")
-            KV("App", "1.2.0")
+            KV("App", BuildConfig.VERSION_NAME)
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -699,12 +695,9 @@ private fun SettingField(f: Field, edit: String?, onEdit: (String) -> Unit) {
                     }
                 }
             }
-            "pass" -> OutlinedTextField(
-                value, onEdit, label = { Text(label) }, singleLine = true,
-                placeholder = { Text(if (f.isSet) "•••••• (unchanged)" else "not set") },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
+            "pass" -> PasswordField(
+                value, onEdit, label, Modifier.fillMaxWidth(),
+                placeholder = if (f.isSet) "•••••• (unchanged)" else "not set"
             )
             else -> OutlinedTextField(
                 value, onEdit, label = { Text(label) }, singleLine = true,

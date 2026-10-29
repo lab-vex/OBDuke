@@ -146,6 +146,103 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setPref(key: String, v: Boolean) { prefs.edit().putBoolean(key, v).apply() }
 
+    // ---------------- app updates (GitHub Releases) ----------------
+
+    val updater = Updater(app)
+    val updAuto = mutableStateOf(prefs.getBoolean("upd_auto", true))
+    val ghToken = mutableStateOf(prefs.getString("gh_token", "")!!)
+    /** Newer release found: shows the update dialog while non-null. */
+    val update = mutableStateOf<Updater.Release?>(null)
+    /** Download progress 0..1 while downloading, else null. */
+    val updProgress = mutableStateOf<Float?>(null)
+    val updChecking = mutableStateOf(false)
+    /** One-line result of the last check, shown in the Updates card. */
+    val updStatus = mutableStateOf("")
+    /** Shows the "uninstall once" dialog: the new APK is signed with a different key. */
+    val updSignerMismatch = mutableStateOf(false)
+    private var updApk: java.io.File? = null
+    private var updWaitingForPermission = false
+
+    fun saveGhToken(t: String) {
+        ghToken.value = t.trim()
+        prefs.edit().putString("gh_token", ghToken.value).apply()
+    }
+
+    /** [manual] = the user tapped Check now; launch checks stay quiet unless there's an update. */
+    fun checkForUpdate(manual: Boolean) {
+        if (updChecking.value || updProgress.value != null) return
+        if (!manual && !updAuto.value) return
+        updChecking.value = true
+        if (manual) updStatus.value = "Checking…"
+        viewModelScope.launch {
+            try {
+                val r = updater.check(ghToken.value)
+                when {
+                    r == null -> updStatus.value = "Up to date (${Updater.CURRENT})"
+                    // on launch, don't nag about a version the user already said "Later" to
+                    !manual && prefs.getString("upd_skip", "") == r.version ->
+                        updStatus.value = "Version ${r.version} available"
+                    else -> { updStatus.value = "Version ${r.version} available"; update.value = r }
+                }
+                prefs.edit().putLong("upd_last", System.currentTimeMillis()).apply()
+            } catch (e: Exception) {
+                updStatus.value = e.message ?: "Update check failed"
+                if (manual) toast.value = updStatus.value
+            } finally {
+                updChecking.value = false
+            }
+        }
+    }
+
+    fun laterUpdate() {
+        update.value?.let { prefs.edit().putString("upd_skip", it.version).apply() }
+        update.value = null
+    }
+
+    fun installUpdate() {
+        val r = update.value ?: return
+        if (updProgress.value != null) return
+        updProgress.value = 0f
+        viewModelScope.launch {
+            try {
+                val apk = updater.download(r, ghToken.value) { updProgress.value = it }
+                updApk = apk
+                if (!updater.sameSigner(apk)) {
+                    update.value = null
+                    updSignerMismatch.value = true
+                    return@launch
+                }
+                update.value = null
+                launchInstaller()
+            } catch (e: Exception) {
+                toast.value = e.message ?: "Update failed"
+            } finally {
+                updProgress.value = null
+            }
+        }
+    }
+
+    private fun launchInstaller() {
+        val apk = updApk ?: return
+        if (!updater.canInstall()) {
+            // Android needs a one-off "allow from this source"; we carry on in onAppResumed()
+            updWaitingForPermission = true
+            toast.value = "Allow OBDuke to install apps, then come back"
+            updater.openInstallPermission()
+            return
+        }
+        updWaitingForPermission = false
+        updater.install(apk)
+    }
+
+    /** Called from MainActivity.onResume: finish an install that was waiting on the permission. */
+    fun onAppResumed() {
+        if (updWaitingForPermission) {
+            if (updater.canInstall()) launchInstaller()
+            else { updWaitingForPermission = false; toast.value = "Update not installed: permission wasn't given" }
+        }
+    }
+
     fun setTransport(t: String) {
         transport.value = t
         prefs.edit().putString("transport", t).apply()
