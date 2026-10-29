@@ -35,7 +35,7 @@
 #include "esp_bt.h"
 #include "web_ui.h"
 
-#define FW_VERSION "1.2.1"
+#define FW_VERSION "1.2.2"
 #define OBD_FUNC_ID 0x7DF
 
 
@@ -248,7 +248,7 @@ static String sigParse(const String &txt, Sig &s) {
   for (int i = 0; i <= (int)t.length() && nf < 8; i++) {
     if (i == (int)t.length() || t[i] == ':') { f[nf++] = t.substring(start, i); start = i + 1; }
   }
-  if (nf < 6) return "Format: " SIG_HELP ", e.g. 120:2:2:b:0.01:0:Front wheel:km/h";
+  if (nf < 6) return "Format: " SIG_HELP ", e.g. 12B:0:2:b:0.05627:0:Front wheel:km/h";
   for (int i = 0; i < nf; i++) f[i].trim();
   String src = f[0]; src.toUpperCase();
   if (src.startsWith("0X")) src = src.substring(2);

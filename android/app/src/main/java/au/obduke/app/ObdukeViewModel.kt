@@ -23,7 +23,9 @@ data class SigDef(val key: String, val name: String, val unit: String)
 /** One row of the bus sniffer or watch view. chg = changed just now, mk = changed since Mark. */
 data class ByteRow(
     val id: String, val hz: String, val bytes: List<String>, val chg: Int, val mk: Int,
-    val ranges: String, val stale: Boolean
+    val ranges: String, val stale: Boolean,
+    /** Sniffer only: the KTM table entry for this ID (null if it isn't in the table) and the frame's byte values. */
+    val known: KEntry? = null, val data: IntArray = IntArray(0)
 )
 
 data class Field(
@@ -107,6 +109,14 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
     val sniffHideDiag = mutableStateOf(true)
     val sniffOnlyMarked = mutableStateOf(false)
     val sniffMsg = mutableStateOf("Not running.")
+    /** Known KTM CAN IDs (assets/can_ids.json). Empty if the asset can't be read, which just switches the labels off. */
+    val known: KnownIds = try {
+        KnownIds.parse(app.assets.open("can_ids.json").bufferedReader().use { it.readText() })
+    } catch (_: Exception) { KnownIds.EMPTY }
+    val sniffOnlyUnknown = mutableStateOf(false)
+    /** IDs whose decoded fields are expanded; survives the 400 ms redraw. */
+    val sniffOpen = mutableStateMapOf<String, Boolean>()
+    val sniffSummary = mutableStateOf("")
     val watchOn = mutableStateOf(false)
     val watchReq = mutableStateOf("21 22")
     val watchRow = mutableStateOf<ByteRow?>(null)
@@ -570,30 +580,61 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
         lastSniff = j
         val a = j.optJSONArray("ids") ?: JSONArray()
         val rows = mutableListOf<ByteRow>()
+        var busIds = 0
+        val fresh = mutableListOf<String>()
         for (i in 0 until a.length()) {
             val o = a.getJSONObject(i)
             val id = o.optString("id")
             val mk = o.optInt("m")
-            if (sniffHideDiag.value && id.length == 3 && id.startsWith("7")) continue
+            val ke = known.lookup(id)
+            if (!known.isDiag(id)) { busIds++; if (ke == null) fresh.add(id) }
+            if (sniffHideDiag.value && known.isDiag(id)) continue
             if (sniffOnlyMarked.value && mk == 0) continue
+            if (sniffOnlyUnknown.value && ke != null) continue
             val lo = o.optString("lo").split(" ")
             val hi = o.optString("hi").split(" ")
             val rg = lo.indices.filter { ((mk shr it) and 1) == 1 }.joinToString("  ") { "b$it ${lo[it]}-${hi.getOrElse(it) { "" }}" }
+            val bytes = o.optString("d").split(" ").filter { it.isNotEmpty() }
             rows.add(
                 ByteRow(
-                    id, "${o.optString("hz")} Hz", o.optString("d").split(" ").filter { it.isNotEmpty() },
-                    o.optInt("c"), mk, rg, o.optLong("age") > 2000
+                    id, "${o.optString("hz")} Hz", bytes, o.optInt("c"), mk, rg, o.optLong("age") > 2000,
+                    ke, IntArray(bytes.size) { bytes[it].toIntOrNull(16) ?: 0 }
                 )
             )
         }
         rows.sortBy { it.id.toLongOrNull(16) ?: 0L }
         sniffRows.clear()
         sniffRows.addAll(rows)
+        sniffSummary.value =
+            if (busIds == 0) ""
+            else "${busIds - fresh.size} of $busIds IDs on this bus are in the KTM list" +
+                (if (fresh.isNotEmpty()) ". Not in the list: ${fresh.joinToString(" ")}" else "") + "."
         sniffMsg.value = when {
             rows.isNotEmpty() -> if (j.optBoolean("full")) "Table full (64 IDs). Use the filters or Clear." else ""
             j.optBoolean("on") -> "Listening… no frames yet."
             else -> "Not running."
         }
+    }
+
+    /** Plain-text copy of the whole capture, for pasting into a message. Empty if nothing has been captured. */
+    fun sniffReport(): String {
+        val a = lastSniff?.optJSONArray("ids") ?: return ""
+        if (a.length() == 0) return ""
+        val all = (0 until a.length()).map { a.getJSONObject(it) }.sortedBy { it.optString("id").toLongOrNull(16) ?: 0L }
+        val out = StringBuilder("OBDuke bus capture: ${Math.round(lastSniff!!.optLong("ms") / 1000.0)} s, ${all.size} IDs" +
+            (if (lastSniff!!.optBoolean("full")) " (table full)" else ""))
+        for (o in all) {
+            val id = o.optString("id")
+            val lo = o.optString("lo").split(" ")
+            val hi = o.optString("hi").split(" ")
+            val mk = o.optInt("m")
+            val moved = lo.indices.filter { ((mk shr it) and 1) == 1 }.joinToString(", ") { "D$it ${lo[it]}-${hi.getOrElse(it) { "" }}" }
+            val k = known.lookup(id)
+            out.append("\n").append(id.padEnd(4)).append(' ').append(o.optString("hz").padStart(6)).append(" Hz  ").append(o.optString("d"))
+            if (moved.isNotEmpty()) out.append("  moved: ").append(moved)
+            out.append(if (k != null) "  [${k.name}]" else "  [not in KTM list]")
+        }
+        return out.toString()
     }
 
     // ---------------- watch a request ----------------

@@ -17,6 +17,12 @@ jobs:
       - name: Firmware logic tests (simulated Duke)
         run: ./test/run.sh
 
+      - name: KTM CAN ID table is valid and the generated copies are up to date
+        run: python3 tools/gen_can_ids.py --check
+
+      - name: KTM CAN ID decoder (web page copy)
+        run: node test/test_known_ids.js
+
   firmware:
     runs-on: ubuntu-latest
     steps:

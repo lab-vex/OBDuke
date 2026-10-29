@@ -224,21 +224,29 @@ Everything is read-only except **Clear codes** and the **raw command**, which yo
 
 ## Finding wheel speeds (and other hidden values)
 
-The ECU only reports one speed (PID 0D). Front and rear wheel speeds come from the Bosch ABS unit, and KTM's CAN IDs for them aren't published, so you find them yourself:
+The ECU only reports one speed (PID 0D). Front and rear wheel speeds come from the Bosch ABS unit, and KTM has never published its CAN IDs. People have captured them on other bikes though (690, 701, 890/790, 1290, 390 Adventure), and the sniffer carries a table of those layouts, so it can point at the likely ID for you. Nobody has published a capture from a Gen 1 390 Duke, so treat the table as a list of things to try and check each one on your bike. Details and sources: [docs/can-ids.md](docs/can-ids.md).
 
 1. Bike on a paddock stand, key on, engine off. Tools > **Bus sniffer > Start**.
-2. Tick *Only IDs changed since Mark*, tap **Mark**, then spin the **front wheel** by hand.
-3. The ID whose bytes light up (and whose range grows as you spin faster) is your front wheel speed. Do the same for the rear.
-4. Note the ID, the first byte and how many bytes (usually 2). Add it in Settings > **Custom signals**:
+2. An ID with a name under it (e.g. *ABS wheel speeds and lean*) is one other KTMs use. Tap the name: you get the byte map, what to do to test it, and a live value for every field. A value marked with a cross is outside what's believable, so that layout probably isn't your bike's.
+3. Spin the **front wheel** by hand. If the front wheel speed value follows it, you've found it. Do the same for the rear.
+4. For IDs with no name, tick *Only IDs not in the KTM list*, tap **Mark**, then spin the wheel. The ID whose bytes light up (and whose range grows as you spin faster) is the one.
+5. Add it in Settings > **Custom signals**. Fields that sit on whole bytes show a ready-made line (tap it to copy). The format is:
 
    `SOURCE:byte:length:b/l:scale:offset:name:unit`
 
-   e.g. `120:2:2:b:0.01:0:Front wheel:km/h`
+   e.g. `12B:0:2:b:0.05627:0:Front wheel:km/h`
    - SOURCE: the CAN ID in hex, or a KTM local ID like `2122` (byte 0 = first byte after `61 22`)
    - b / l = big / little endian, B / L = signed
    - get the scale by comparing against the dash speed or GPS at a steady speed
 
 The new tile appears on the Dash, in the log CSV and to Torque as `22F001`-`22F004`. The same trick works for brake switch, clutch, side stand and gear, if they're broadcast. Use **Watch** with `21 22` (etc.) to find values hidden in the KTM local IDs; rev the engine or flick a switch and watch which byte moves.
+
+**The KTM ID table:**
+- It lives in one file, `android/app/src/main/assets/can_ids.json`: the app reads it directly, and `python3 tools/gen_can_ids.py` copies it into the web page (`firmware/obduke/web_ui.h`) and the tables in `docs/can-ids.md`. CI runs the generator with `--check`, so the three can't drift apart.
+- Every entry says which bike it was seen on and how sure that is: **confirmed** (the project's owner checked it against the dash or the bike), **capture** (found in a real capture but not cross-checked, so the unit or meaning may be a guess), **reported** (a forum post with no capture to check) or **candidate** (an educated guess from the byte pattern).
+- Where the 690 and the 390 Adventure disagree about the same bytes (coolant, side stand), both are listed. Whichever gives a believable number is the one for your bike.
+- *Copy capture report* puts the whole capture (every ID, its bytes and which ones moved) on the clipboard. If you capture on your Gen 1, please post it: it's the missing piece.
+- Found a layout that's right (or wrong) on your bike? Edit `can_ids.json`, run the generator, and send it in.
 
 **Notes:**
 - A full local-ID scan takes about a minute, and the unit doesn't answer anything else during it.

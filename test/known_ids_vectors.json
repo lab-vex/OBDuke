@@ -1,0 +1,51 @@
+{
+  "about": "Shared test frames for the known-CAN-ID decoder. test_known_ids.js runs them against the web page's JavaScript; the Android KnownIds.kt must give the same text. 'f' is the index in the entry's fields list.",
+  "decode": [
+    { "id": "120", "data": "06 A4 FD 18 00 00 00 30", "expect": [
+      { "f": 0, "t": "1700 rpm", "ok": true }, { "f": 1, "t": "100 %", "ok": true },
+      { "f": 2, "t": "RUN", "ok": true }, { "f": 3, "t": "RUN", "ok": true }, { "f": 4, "t": "PRESSED", "ok": true },
+      { "f": 5, "t": "map 1", "ok": true }, { "f": 6, "t": "Street", "ok": true } ] },
+    { "id": "120", "data": "00 00 00 00 05 00 00 00", "expect": [
+      { "f": 2, "t": "STOP", "ok": true }, { "f": 4, "t": "-", "ok": true }, { "f": 5, "t": "map 2", "ok": true }, { "f": 6, "t": "5", "ok": false } ] },
+    { "id": "129", "data": "30 00 00 00 00 00 00 20", "expect": [ { "f": 0, "t": "3", "ok": true }, { "f": 1, "t": "released", "ok": true } ] },
+    { "id": "129", "data": "0B 00 00 00 00 00 00 40", "expect": [ { "f": 0, "t": "N", "ok": true }, { "f": 1, "t": "PULLED", "ok": true } ] },
+    { "id": "129", "data": "90 00 00 00 00 00 00 40", "expect": [ { "f": 0, "t": "9", "ok": false } ] },
+    { "id": "12B", "data": "07 08 07 6C 00 12 34 56", "expect": [
+      { "f": 0, "t": "101.3 km/h", "ok": true }, { "f": 1, "t": "106.9 km/h", "ok": true }, { "f": 2, "t": "291", "ok": true }, { "f": 3, "t": "1110", "ok": true } ] },
+    { "id": "12B", "data": "00 00 00 00 00 80 0F FF", "expect": [ { "f": 2, "t": "-2048", "ok": true }, { "f": 3, "t": "-1", "ok": true } ] },
+    { "id": "12F", "data": "FF 70 00 00 00 00 00 00", "expect": [ { "f": 0, "t": "-9", "ok": true }, { "f": 1, "t": "65392 raw", "ok": true } ] },
+    { "id": "540", "data": "02 06 A4 03 01 00 03 E8", "expect": [
+      { "f": 0, "t": "1700 rpm", "ok": true }, { "f": 1, "t": "3", "ok": true }, { "f": 2, "t": "UP", "ok": true },
+      { "f": 3, "t": "ok", "ok": true }, { "f": 4, "t": "100.0 °C", "ok": true }, { "f": 5, "t": "UP", "ok": true },
+      { "f": 6, "t": "0.3 °C", "ok": true }, { "f": 7, "t": "41990 raw", "ok": true } ] },
+    { "id": "540", "data": "02 00 00 07 80 FF FF FF", "expect": [
+      { "f": 1, "t": "shifting", "ok": true }, { "f": 3, "t": "FAULT", "ok": true }, { "f": 4, "t": "6553.5 °C", "ok": false } ] },
+    { "id": "55A", "data": "00 53 B6 00 00 00 00 00", "expect": [ { "f": 0, "t": "2143.0 km", "ok": true } ] },
+    { "id": "290", "data": "59 D8 00 0E 00 00 00 00", "expect": [ { "f": 0, "t": "23000 raw", "ok": true }, { "f": 1, "t": "ON", "ok": true } ] },
+    { "id": "290", "data": "00 10 00 02 00 00 00 00", "expect": [ { "f": 1, "t": "off", "ok": true } ] },
+    { "id": "290", "data": "00 10 00 06 00 00 00 00", "expect": [ { "f": 1, "t": "1", "ok": false } ] },
+    { "id": "12D", "data": "00 01 F4 00 00 00 00 00", "expect": [ { "f": 0, "t": "50.0 km/h?", "ok": true } ] },
+    { "id": "120", "data": "06 A4", "expect": [ { "f": 0, "t": "1700 rpm", "ok": true }, { "f": 1, "t": null } ] }
+  ],
+  "signal": [
+    { "id": "120", "f": 0, "line": "120:0:2:b:1:0:Engine speed:rpm" },
+    { "id": "120", "f": 1, "line": "120:2:1:b:0.3953:0:Throttle grip (commanded):%" },
+    { "id": "12B", "f": 0, "line": "12B:0:2:b:0.05627:0:Front wheel speed:km/h" },
+    { "id": "540", "f": 4, "line": "540:6:2:b:0.1:0:Coolant:°C" },
+    { "id": "540", "f": 7, "line": "540:1:2:l:1:0:Fuel flow (raw per second):" },
+    { "id": "55A", "f": 0, "line": "55A:0:3:b:0.1:0:Odometer:km" },
+    { "id": "12D", "f": 0, "line": "12D:1:2:b:0.1:0:Rear wheel speed:km/h" },
+    { "id": "129", "f": 0, "line": "" },
+    { "id": "120", "f": 2, "line": "" },
+    { "id": "12B", "f": 3, "line": "" }
+  ],
+  "lookup": [
+    { "id": "120", "name": "Engine: rpm, throttle, switches" },
+    { "id": "6A7", "name": "Multi-frame transport (dash?)" },
+    { "id": "7EC", "name": "Other module: reply" },
+    { "id": "7E4", "name": "Other module: request" },
+    { "id": "7E8", "name": "Engine ECU: reply" },
+    { "id": "2A0", "name": null },
+    { "id": "18DAF110", "name": null }
+  ]
+}

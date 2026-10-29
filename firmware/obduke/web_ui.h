@@ -95,6 +95,13 @@ nav svg{display:block;margin:0 auto 4px;width:22px;height:22px;fill:none;stroke:
 .sr i.c{background:var(--o);color:#000}
 .sr .rg{font-size:11px;color:var(--mut);margin:2px 0 0 44px}
 .sr.stale{opacity:.45}
+.sr .kxl{margin:2px 0 0 44px;font-size:12px;color:var(--o);cursor:pointer}
+.kxd{margin:4px 0 2px 44px;padding:6px 8px;background:#0d0d0d;border-radius:8px;font-size:12px}
+.kxf{padding:3px 0;border-bottom:1px solid #1a1a1a}
+.kxf:last-child{border:0}
+.kxf.bad{opacity:.5}
+.kxv{font-family:ui-monospace,Menlo,monospace;color:var(--tx);font-weight:700}
+.kxs{font-size:11px;color:var(--mut);word-break:break-word}
 .mod{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line)}
 .mod:last-child{border:0}
 .mod .c{font-family:ui-monospace,Menlo,monospace;font-weight:800;color:var(--o)}
@@ -152,9 +159,12 @@ nav svg{display:block;margin:0 auto 4px;width:22px;height:22px;fill:none;stroke:
   </div>
   <label class="chk"><input type="checkbox" id="snhide" checked onchange="sniffDraw()">Hide diagnostic replies (7xx)</label>
   <label class="chk"><input type="checkbox" id="snchg" onchange="sniffDraw()">Only IDs changed since mark</label>
-  <p class="mut" style="margin:8px 0">Everything the bike broadcasts. Orange box = changed just now, orange text = changed since Mark (with its range below). Tap Mark, spin the front wheel by hand, and watch which bytes light up.</p>
+  <label class="chk"><input type="checkbox" id="snunk" onchange="sniffDraw()">Only IDs not in the KTM list</label>
+  <p class="mut" style="margin:8px 0">Everything the bike broadcasts. Orange box = changed just now, orange text = changed since Mark (with its range below). Tap Mark, spin the front wheel by hand, and watch which bytes light up. An orange name under an ID means other KTMs use it: tap the name for the byte map, what to test, and a Custom signals line.</p>
   <div class="sn mono" id="sniff"><span class="mut">Not running.</span></div>
-  <p class="mut" style="margin-top:8px">Found one? Add it in Settings &gt; Custom signals, e.g. <span class="mono">120:2:2:b:0.01:0:Front wheel:km/h</span></p>
+  <div class="row" style="margin-top:8px"><button class="small" onclick="sniffCopy()">Copy capture report</button></div>
+  <textarea id="snrep" class="mono" readonly style="display:none;width:100%;height:150px;margin-top:8px;background:#000;color:#ddd;border:1px solid var(--line);border-radius:8px"></textarea>
+  <p class="mut" style="margin-top:8px">Found one? Add it in Settings &gt; Custom signals, e.g. <span class="mono">12B:0:2:b:0.05627:0:Front wheel:km/h</span></p>
 
   <h2>Watch a request</h2>
   <div class="row"><input id="watchin" class="mono" placeholder="21 22   or   @7B0 21 05" style="flex:1;min-width:160px"><button class="p" id="wabtn" onclick="watchToggle()">Watch</button><button onclick="watchMark()">Mark</button></div>
@@ -345,6 +355,47 @@ function modClear(tx){
   act(async()=>{const r=await cmd('mclear '+tx+' yes');toast(r.msg);if(r.ok)modCodes(tx)})
 }
 
+// ---------- known KTM CAN IDs (table generated from can_ids.json by tools/gen_can_ids.py) ----------
+/*KIDS-BEGIN*/const KIDS={"bikes":{"690":"KTM 690 Enduro R, 2020","Adv390":"KTM 390 Adventure (Gen 2), 2026","701":"Husqvarna 701 Enduro (Euro 5), 2023","1290":"KTM 1290 Super Duke R, 2017","890":"KTM 890 Duke (790 Duke forum posts)"},"ids":[{"id":"120","name":"Engine: rpm, throttle, switches","ms":20,"from":"engine ECU","try":"Key on, then rev the engine or twist the grip. Flip the kill switch. Press start.","fields":[{"name":"Engine speed","b":0,"n":2,"unit":"rpm","min":0,"max":14000,"bikes":{"690":"confirmed","Adv390":"confirmed"}},{"name":"Throttle grip (commanded)","b":2,"mul":0.3953,"dp":0,"unit":"%","min":0,"max":101,"bikes":{"690":"confirmed","Adv390":"confirmed","890":"reported"},"note":"raw 0 = closed, 253-255 = fully open"},{"name":"Kill switch","b":3,"shift":4,"bits":1,"yes":"RUN","no":"STOP","bikes":{"690":"confirmed"}},{"name":"Kill switch","b":3,"shift":3,"bits":1,"yes":"RUN","no":"STOP","bikes":{"Adv390":"confirmed"},"note":"the same bit the 690 uses for the kill switch is the start button here"},{"name":"Start button","b":3,"shift":4,"bits":1,"yes":"PRESSED","no":"-","bikes":{"Adv390":"confirmed"}},{"name":"Throttle map in use","b":4,"shift":0,"bits":1,"map":{"0":"map 1","1":"map 2"},"bikes":{"690":"confirmed"}},{"name":"Ride mode","b":4,"map":{"0":"Street","1":"Offroad","2":"Rain"},"bikes":{"Adv390":"capture"},"note":"names assumed from the menu order"},{"b":7,"text":"alive counter, steps by 0x20 (30, 50, 70, 90, B0, D0)"}]},{"id":"121","name":"Throttle grip sensors","ms":20,"from":"engine ECU","try":"Twist the grip with the key on. Two bytes should rise together.","note":"D1 and D3 rise with the grip: probably the two redundant ride-by-wire sensors.","fields":[{"name":"Grip sensor A?","b":1,"bikes":{"690":"candidate"}},{"name":"Grip sensor B?","b":3,"bikes":{"690":"candidate"}},{"b":7,"text":"rolling counter"}]},{"id":"128","name":"Throttle closed switch","ms":20,"from":"key-on","try":"Key on: twist the grip off its stop and let go.","note":"690: reads 7F FF ... until the ECU wakes, then D2 toggles 02/03 with the engine running.","fields":[{"name":"Throttle","b":2,"shift":0,"bits":1,"yes":"closed","no":"open","bikes":{"Adv390":"confirmed","690":"candidate"}}]},{"id":"129","name":"Gear and clutch","ms":20,"from":"engine ECU","try":"Key on, engine off: roll the bike and change gear. Pull the clutch lever.","note":"701 Enduro: the 701display firmware watches D0 bit 3 going LOW to spot the off-road ABS button being held while stopped.","fields":[{"name":"Gear","b":0,"shift":4,"bits":4,"map":{"0":"N"},"min":0,"max":6,"bikes":{"690":"confirmed","Adv390":"confirmed","890":"reported"}},{"name":"Clutch","b":0,"shift":3,"bits":1,"yes":"PULLED","no":"released","bikes":{"690":"confirmed","Adv390":"confirmed","890":"reported"}},{"b":7,"text":"alive counter, steps by 0x20 (20, 40, 60, 80, A0, C0)"}]},{"id":"12A","name":"Ride mode, traction and ABS states","ms":50,"from":"key-on","try":"Bike stopped: change ride mode, press the TC button, switch ABS mode.","note":"The bit positions differ between models, so try each variant against what you change.","fields":[{"name":"Throttle","b":0,"shift":1,"bits":1,"yes":"closed","no":"open","bikes":{"690":"capture"}},{"name":"Requested throttle map","b":1,"shift":6,"bits":1,"map":{"0":"map 1","1":"map 2"},"bikes":{"690":"confirmed"}},{"name":"Traction control","b":1,"shift":4,"bits":1,"yes":"OFF","no":"ON","bikes":{"Adv390":"confirmed"},"note":"D1 = 28 on, 18 off. Offroad ride mode also turns it off."},{"name":"Off-road ABS mode","b":2,"shift":0,"bits":1,"yes":"OFF-ROAD","no":"road","bikes":{"701":"capture"}},{"name":"Traction control (second bit)","b":4,"shift":5,"bits":1,"yes":"set","no":"clear","bikes":{"Adv390":"capture"}},{"name":"ABS mode (second bit)","b":4,"shift":3,"bits":1,"yes":"set","no":"clear","bikes":{"Adv390":"capture"}},{"name":"ABS mode","b":6,"map":{"2":"mode A","4":"mode B"},"bikes":{"Adv390":"capture"},"note":"names not known"}]},{"id":"12B","name":"ABS wheel speeds and lean","ms":10,"from":"ABS","try":"Bike on a stand, key on: spin the front wheel by hand, then the rear. Lean the bike on the stand for tilt and lean.","note":"Not sent at all on the 390 Adventure (Gen 2). Scale: 701 Enduro fitted 17.77 counts per km/h against its OBD speed; the 690 speedometer gave about 17.0. Lean: 0 is upright, 1 and up lean right, FFF and down lean left (1290 thread). A 790 forum post (no ID given) says speed is (D0*256+D1)/16, unverified.","fields":[{"name":"Front wheel speed","b":0,"n":2,"mul":0.05627,"dp":1,"unit":"km/h","min":0,"max":280,"bikes":{"690":"confirmed","701":"confirmed"}},{"name":"Rear wheel speed","b":2,"n":2,"mul":0.05627,"dp":1,"unit":"km/h","min":0,"max":280,"bikes":{"690":"confirmed"},"note":"agrees with the front within about 3%"},{"name":"Tilt (raw)","b":5,"n":2,"shift":4,"bits":12,"signed":true,"bikes":{"1290":"candidate","690":"candidate"},"note":"12-bit signed, not validated"},{"name":"Lean angle (raw)","b":6,"n":2,"shift":0,"bits":12,"signed":true,"bikes":{"1290":"confirmed","690":"candidate"},"note":"12-bit signed; degrees per count not published"}]},{"id":"12C","name":"Slow wheel-speed copy?","ms":1000,"from":"key-on","bikes":{"690":"candidate"},"fields":[{"b":0,"text":"all zero when stopped; two 12-bit values follow wheel speed (slower, different scale)"}]},{"id":"12D","name":"Rear wheel speed (390 Adventure)","from":"ABS?","try":"Bike on a stand: spin the rear wheel by hand. Compare with the dash on a ride.","fields":[{"name":"Rear wheel speed","b":1,"n":2,"mul":0.1,"dp":1,"unit":"km/h?","min":0,"max":280,"bikes":{"Adv390":"capture"},"note":"a per-pulse count; the unit (0.1 km/h per count) is a guess, calibrate against the dash"}]},{"id":"12E","name":"Smoothed speed (390 Adventure)","from":"ABS?","note":"690: D0 is a status flag (00/40) and D7 a counter.","fields":[{"name":"Speed, smoothed","b":1,"n":2,"mul":0.1,"dp":1,"unit":"km/h?","min":0,"max":280,"bikes":{"Adv390":"capture"},"note":"about 0.7 x the 12D value, fades out after the wheel stops"}]},{"id":"12F","name":"Lean or rear brake? (390 Adventure)","ms":10,"from":"key-on","try":"Tilt the bike on its stand. Then press only the rear pedal. See which one moves D0-D1.","note":"That project claims both uses for D0-D1 and has not settled it. D1 bit 0x20 also flips in bursts (a status bit, not identified).","fields":[{"name":"Lean angle (raw)","b":0,"n":2,"shift":4,"bits":12,"signed":true,"bikes":{"Adv390":"capture"},"note":"tilted by hand on the stand: negative left, positive right"},{"name":"Rear brake (raw)","b":0,"n":2,"unit":"raw","bikes":{"Adv390":"capture"},"note":"rests near 304, rises 50-90 with the pedal"}]},{"id":"174","name":"Motion sensor (IMU)?","ms":10,"from":"key-on","bikes":{"690":"candidate"},"try":"Lean the bike on the stand and watch which of 174, 178 and 17C swings.","fields":[{"b":0,"text":"two 16-bit values centred near 0x8000 (one offset by gravity); counter in D6 low nibble; checksum in D7"}]},{"id":"176","name":"Motion or ABS data? (390 Adventure)","ms":10,"from":"key-on","bikes":{"Adv390":"candidate"},"fields":[{"b":0,"text":"D0 and D4 jitter at rest; D6 low nibble counts 0-F; D7 looks like a checksum. Large erratic jumps = raw sensor data, not a clean speed."}]},{"id":"177","name":"Motion or ABS data? (390 Adventure)","ms":10,"from":"key-on","bikes":{"Adv390":"candidate"},"fields":[{"b":4,"text":"D4 jitters at rest; D6 low nibble counts 0-F; D7 looks like a checksum."}]},{"id":"178","name":"Motion sensor (IMU)?","ms":10,"from":"key-on","try":"Lean the bike on the stand: D0-D1 should swing.","fields":[{"name":"Lean candidate","b":0,"n":2,"unit":"raw","bikes":{"690":"candidate"},"note":"swings most when the bike leans"},{"b":6,"text":"counter in D6 low nibble; checksum in D7"}]},{"id":"17C","name":"Motion sensor (IMU)?","ms":10,"from":"key-on","try":"Lean the bike on the stand: D4-D5 should swing.","fields":[{"name":"Lean candidate","b":4,"n":2,"unit":"raw","bikes":{"690":"candidate"},"note":"swings most when the bike leans"},{"b":6,"text":"counter in D6 low nibble; checksum in D7"}]},{"id":"290","name":"Brake pressure and brake light","ms":10,"from":"ABS?","try":"Key on: squeeze the front lever, then press the rear pedal.","note":"690: D2-D7 stay 0, so there is no brake-light bit there.","fields":[{"name":"Front brake pressure (raw)","b":0,"n":2,"unit":"raw","min":0,"max":40000,"bikes":{"690":"confirmed","Adv390":"confirmed","890":"reported"},"note":"390 Adventure: rest noise up to about 48, firm stop 15,000-20,000"},{"name":"Brake light (front or rear)","b":3,"shift":2,"bits":2,"map":{"0":"off","3":"ON"},"bikes":{"Adv390":"confirmed"},"note":"D3 = 02 off, 0E on"}]},{"id":"300","name":"Constant 0F... (off-road ABS dongle?)","ms":200,"from":"key-on","bikes":{"690":"candidate"},"fields":[{"b":0,"text":"always 0F... on the 690; maybe the off-road ABS dongle, untested with it unplugged"}]},{"id":"450","name":"Buttons and ABS mode","ms":50,"from":"key-on","try":"Press the TC button and the map button. Change ABS mode with the bike stopped.","note":"390 Adventure: D2 sits at 0x80 at rest, so the 690's TC-button bit may not apply.","fields":[{"name":"TC button","b":2,"shift":0,"bits":1,"yes":"PRESSED","no":"-","bikes":{"690":"confirmed"}},{"name":"Map button / request","b":4,"map":{"0":"map 0","9":"map 1"},"bikes":{"690":"confirmed"}},{"name":"ABS mode","b":3,"map":{"1":"Road","2":"Offroad"},"bikes":{"Adv390":"capture"},"note":"names assumed"},{"name":"Traction (second bit)","b":4,"shift":3,"bits":1,"yes":"set","no":"clear","bikes":{"Adv390":"capture"}}]},{"id":"540","name":"Slow status: coolant, gear, stand, fuel","ms":100,"from":"engine ECU","try":"Key on: raise and lower the side stand. Warm the engine and compare coolant with the dash.","note":"The 690 and 390 Adventure put coolant and the side stand one byte apart, so the variants disagree. Whichever gives a believable number is the one for your bike.","fields":[{"name":"Engine speed (slow copy)","b":1,"n":2,"unit":"rpm","min":0,"max":14000,"bikes":{"690":"confirmed"}},{"name":"Gear (slow copy)","b":3,"shift":0,"bits":4,"map":{"0":"N","7":"shifting"},"min":0,"max":7,"bikes":{"690":"confirmed","701":"capture"}},{"name":"Side stand","b":4,"shift":0,"bits":1,"yes":"UP","no":"DOWN","bikes":{"690":"confirmed","701":"capture"}},{"name":"Side stand fault","b":4,"shift":7,"bits":1,"yes":"FAULT","no":"ok","bikes":{"690":"capture"}},{"name":"Coolant","b":6,"n":2,"mul":0.1,"dp":1,"unit":"\u00b0C","min":-40,"max":150,"bikes":{"690":"confirmed"}},{"name":"Side stand","b":3,"shift":0,"bits":1,"yes":"UP","no":"DOWN","bikes":{"Adv390":"confirmed"}},{"name":"Coolant","b":5,"n":2,"mul":0.1,"dp":1,"unit":"\u00b0C","min":-40,"max":150,"bikes":{"Adv390":"capture"},"note":"96.2 after a ride; check against the dash"},{"name":"Fuel flow (raw per second)","b":1,"n":2,"le":true,"unit":"raw","bikes":{"Adv390":"capture"},"note":"0 off, about 27 just after start, 19-22 idling; litres per hour not calibrated"}]},{"id":"541","name":"Quickshifter and timers","from":"engine ECU","note":"690: always 02 80. 390 Adventure: a byte counts seconds since start (D4 or D6 in the two captures), so it is a timer, not a sensor.","fields":[{"name":"Quickshifter","b":0,"shift":2,"bits":1,"yes":"ON","no":"OFF","bikes":{"Adv390":"confirmed"}},{"b":4,"text":"seconds-since-start style counter"}]},{"id":"550","name":"Status flag","ms":200,"from":"key-on","bikes":{"690":"candidate"},"fields":[{"b":0,"text":"D0 flips between 00 and 10; D7 is a counter"}]},{"id":"551","name":"Static with engine off (390 Adventure)","from":"key-on","bikes":{"Adv390":"candidate"},"fields":[{"b":0,"text":"static with the engine off; capture again riding"}]},{"id":"553","name":"Slow static: trip or service data?","ms":1000,"from":"key-on","bikes":{"Adv390":"candidate"},"fields":[{"b":0,"text":"1 Hz, static: odometer, trip or service-interval candidate"}]},{"id":"55A","name":"Odometer","ms":1000,"from":"key-on","try":"Compare with the dash odometer.","fields":[{"name":"Odometer","b":0,"n":3,"mul":0.1,"dp":1,"unit":"km","min":0,"max":999999,"bikes":{"Adv390":"confirmed"},"note":"21430 = 2,143 km on the dash"}]},{"id":"5A0","name":"Slow status","from":"key-on","bikes":{"690":"candidate","Adv390":"candidate"},"fields":[{"b":1,"text":"690: D1 and D2 change once after the ECU wakes. 390 Adventure: static with the engine off."}]},{"id":"5A2","name":"Static with engine off (390 Adventure)","from":"key-on","bikes":{"Adv390":"candidate"},"fields":[{"b":0,"text":"capture again riding"}]},{"id":"5B0","name":"Static with engine off (390 Adventure)","from":"key-on","bikes":{"Adv390":"candidate"},"fields":[{"b":0,"text":"capture again riding"}]},{"id":"6B9","name":"Static with engine off (390 Adventure)","from":"key-on","bikes":{"Adv390":"candidate"},"fields":[{"b":0,"text":"capture again riding"}]},{"id":"6A6","to":"6A8","name":"Multi-frame transport (dash?)","ms":25,"from":"?","bikes":{"Adv390":"candidate"},"note":"D0 = 0F or 30 looks like multi-frame framing: probably the dash or a diagnostic transport, not live sensor data.","fields":[]},{"id":"7DF","name":"OBD-II request to all modules","ms":0,"from":"scan tool or this unit","bikes":{},"note":"Only appears while something is asking (a scan tool, or this unit's own requests).","fields":[]},{"id":"7E0","name":"Engine ECU: request","ms":0,"from":"scan tool or this unit","bikes":{},"note":"Confirmed on a 2015 390 Duke: the ECU listens on 7E0 and answers on 7E8.","fields":[]},{"id":"7E8","name":"Engine ECU: reply","ms":0,"from":"engine ECU","bikes":{},"note":"Only appears in answer to a request. Confirmed on a 2015 390 Duke.","fields":[]},{"id":"7E1","to":"7E7","name":"Other module: request","ms":0,"from":"scan tool or this unit","bikes":{},"note":"Physical request to another module (ABS, dash), seen while a scanner or Find modules is running.","fields":[]},{"id":"7E9","to":"7EF","name":"Other module: reply","ms":0,"from":"ABS, dash or similar","bikes":{},"note":"A module answering a request. Find modules lists who answered.","fields":[]}]};/*KIDS-END*/
+const KIDX={};
+KIDS.ids.forEach(e=>{const a=parseInt(e.id,16),b=e.to?parseInt(e.to,16):a;for(let i=a;i<=b;i++)KIDX[i]=e});
+const kinfo=id=>id.length<=3?KIDX[parseInt(id,16)]:null;
+// Value of one table field in a frame (d = array of byte values). null if the frame is too short.
+function kval(f,d){
+  const n=f.n||1;if(f.b+n>d.length)return null;
+  let r=0;
+  if(f.le)for(let i=n-1;i>=0;i--)r=r*256+d[f.b+i];else for(let i=0;i<n;i++)r=r*256+d[f.b+i];
+  const bits=f.bits||8*n;
+  r=Math.floor(r/Math.pow(2,f.shift||0))%Math.pow(2,bits);
+  if(f.signed&&r>=Math.pow(2,bits-1))r-=Math.pow(2,bits);
+  if(f.map){const m=f.map[r];return{t:m!==undefined?m:String(r),ok:m!==undefined||(f.min!==undefined&&r>=f.min&&r<=f.max)}}
+  if(f.yes)return{t:r?f.yes:f.no,ok:true};
+  const v=r*(f.mul||1)+(f.add||0);
+  return{t:v.toFixed(f.dp||0)+(f.unit?' '+f.unit:''),ok:f.min===undefined||(v>=f.min&&v<=f.max)};
+}
+// A ready-to-paste Settings > Custom signals line, for fields that sit on whole bytes.
+function ksig(e,f){
+  const n=f.n||1;
+  if(f.map||f.yes||f.shift||(f.bits&&f.bits!=8*n)||n>4)return'';
+  const num=x=>String(+(+x).toPrecision(4));
+  return e.id+':'+f.b+':'+n+':'+(f.le?(f.signed?'L':'l'):(f.signed?'B':'b'))+':'+num(f.mul||1)+':'+num(f.add||0)+':'+f.name.replace(/[:|]/g,' ').slice(0,28)+':'+(f.unit||'').replace(/[?:]/g,'').replace(/^raw$/,'');
+}
+let snOpen={};
+function knToggle(id){snOpen[id]=!snOpen[id];sniffDraw()}
+function kdetail(e,d){
+  let h='';
+  const eb=Object.entries(e.bikes||{});
+  if(eb.length)h+='<div class="kxs">Seen on: '+eb.map(([b,s])=>esc(KIDS.bikes[b]||b)+' ('+s+')').join(' · ')+'</div>';
+  if(e.try)h+='<div class="kxs">Test: '+esc(e.try)+'</div>';
+  if(e.note)h+='<div class="kxs">'+esc(e.note)+'</div>';
+  (e.fields||[]).forEach(f=>{
+    if(f.text){h+=`<div class="kxf"><b>D${f.b}</b> ${esc(f.text)}</div>`;return}
+    const v=kval(f,d),n=f.n||1,sg=ksig(e,f);
+    h+=`<div class="kxf${v&&v.ok?'':' bad'}"><b>${esc(f.name)}</b> <span class="mut">D${f.b}${n>1?'-D'+(f.b+n-1):''}</span> <span class="kxv">${v?(v.ok?'':'✗ ')+esc(v.t):'-'}</span><div class="kxs">${Object.entries(f.bikes).map(([b,s])=>esc(b)+' '+s).join(' · ')}${f.note?' - '+esc(f.note):''}</div>${sg?'<div class="kxs mono">'+esc(sg)+'</div>':''}</div>`;
+  });
+  return'<div class="kxd">'+h+'</div>';
+}
+
 // ---------- bus sniffer ----------
 let snOn=false,snT=null,snLast=null;
 function sniffToggle(){snOn=!snOn;$('#snbtn').textContent=snOn?'Stop':'Start';cmd(snOn?'sniff start':'sniff stop').then(r=>{snLast=r;sniffDraw()});if(snOn)sniffPoll()}
@@ -355,16 +406,39 @@ async function sniffPoll(){
   snT=setTimeout(sniffPoll,400);
 }
 function byteRow(hex,c,m){return hex.split(' ').map((h,i)=>`<i class="${c>>i&1?'c':(m>>i&1?'m':'')}">${h}</i>`).join('')}
+const isDiag=id=>id.length==3&&id[0]=='7';
 function sniffDraw(){
   const r=snLast,el=$('#sniff');if(!r||!r.ids){return}
-  const hide=$('#snhide').checked,only=$('#snchg').checked;
-  let l=r.ids.filter(e=>!(hide&&e.id.length==3&&e.id[0]=='7')&&!(only&&!e.m));
+  const hide=$('#snhide').checked,only=$('#snchg').checked,unk=$('#snunk').checked;
+  let l=r.ids.filter(e=>!(hide&&isDiag(e.id))&&!(only&&!e.m)&&!(unk&&kinfo(e.id)));
   l.sort((a,b)=>parseInt(a.id,16)-parseInt(b.id,16));
   if(!l.length){el.innerHTML='<span class="mut">'+(r.on?'Listening… no frames yet.':'Not running.')+'</span>';return}
-  el.innerHTML=(r.full?'<div class="mut">Table full (64 IDs) — tick the filters or Clear.</div>':'')+l.map(e=>{
+  const bus=r.ids.filter(e=>!isDiag(e.id)),known=bus.filter(e=>kinfo(e.id)),fresh=bus.filter(e=>!kinfo(e.id));
+  const sum=bus.length?'<div class="mut" style="margin-bottom:6px">'+known.length+' of '+bus.length+' IDs on this bus are in the KTM list'+(fresh.length?'. Not in the list: '+fresh.map(e=>e.id).join(' '):'')+'.</div>':'';
+  el.innerHTML=sum+(r.full?'<div class="mut">Table full (64 IDs) — tick the filters or Clear.</div>':'')+l.map(e=>{
     const lo=e.lo.split(' '),hi=e.hi.split(' ');let rg=[];
     for(let i=0;i<lo.length;i++)if(e.m>>i&1)rg.push('b'+i+' '+lo[i]+'–'+hi[i]);
-    return `<div class="sr${e.age>2000?' stale':''}"><span class="id">${e.id}</span><span class="hz">${e.hz} Hz</span>${byteRow(e.d,e.c,e.m)}${rg.length?'<div class="rg">'+rg.join(' · ')+'</div>':''}</div>`}).join('');
+    const k=kinfo(e.id),open=k&&snOpen[e.id];
+    return `<div class="sr${e.age>2000?' stale':''}"><span class="id">${e.id}</span><span class="hz">${e.hz} Hz</span>${byteRow(e.d,e.c,e.m)}${rg.length?'<div class="rg">'+rg.join(' · ')+'</div>':''}${k?`<div class="kxl" onclick="knToggle('${e.id}')">${open?'▾':'▸'} ${esc(k.name)}</div>`:''}${open?kdetail(k,e.d.split(' ').map(h=>parseInt(h,16))):''}</div>`}).join('');
+}
+// Plain-text copy of the whole capture, for pasting into a message.
+function sniffReport(){
+  const r=snLast;if(!r||!r.ids||!r.ids.length)return'';
+  const out=['OBDuke bus capture: '+Math.round((r.ms||0)/1000)+' s, '+r.ids.length+' IDs'+(r.full?' (table full)':'')];
+  r.ids.slice().sort((a,b)=>parseInt(a.id,16)-parseInt(b.id,16)).forEach(e=>{
+    const lo=e.lo.split(' '),hi=e.hi.split(' '),mv=[];
+    for(let i=0;i<lo.length;i++)if(e.m>>i&1)mv.push('D'+i+' '+lo[i]+'-'+hi[i]);
+    const k=kinfo(e.id);
+    out.push(e.id.padEnd(4)+' '+String(e.hz).padStart(6)+' Hz  '+e.d+(mv.length?'  moved: '+mv.join(', '):'')+(k?'  ['+k.name+']':'  [not in KTM list]'));
+  });
+  return out.join('\n');
+}
+function sniffCopy(){
+  const t=sniffReport();if(!t){toast('Nothing captured yet');return}
+  const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.appendChild(a);a.select();
+  let ok=false;try{ok=document.execCommand('copy')}catch(e){}
+  document.body.removeChild(a);
+  if(ok)toast('Capture copied');else{const b=$('#snrep');b.value=t;b.style.display='block';b.select();toast('Copy it from the box below')}
 }
 
 // ---------- watch a request ----------

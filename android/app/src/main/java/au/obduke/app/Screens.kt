@@ -1,5 +1,8 @@
 package au.obduke.app
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -504,6 +508,14 @@ fun ToolsScreen(vm: ObdukeViewModel) {
         onDispose { vm.sniffPause(); vm.watchPause() }
     }
     val rawAllowed = vm.status.value.optBoolean("raw")
+    val ctx = LocalContext.current
+    val copy: (String, String) -> Unit = { text, msg ->
+        try {
+            (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                .setPrimaryClip(ClipData.newPlainText("OBDuke", text))
+            vm.toast.value = msg
+        } catch (_: Exception) { vm.toast.value = "Couldn't copy" }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Heading("Info", Modifier.padding(top = 0.dp))
         FlowButtons(listOf(
@@ -527,12 +539,19 @@ fun ToolsScreen(vm: ObdukeViewModel) {
         }
         CheckRow("Hide diagnostic replies (7xx)", vm.sniffHideDiag.value) { vm.sniffHideDiag.value = it; vm.sniffRedraw() }
         CheckRow("Only IDs changed since Mark", vm.sniffOnlyMarked.value) { vm.sniffOnlyMarked.value = it; vm.sniffRedraw() }
-        Text("Orange box = changed just now, orange text = changed since Mark. Tap Mark, spin the front wheel by hand and watch which bytes light up. Found one? Add it in Settings > Custom signals.",
+        CheckRow("Only IDs not in the KTM list", vm.sniffOnlyUnknown.value) { vm.sniffOnlyUnknown.value = it; vm.sniffRedraw() }
+        Text("Orange box = changed just now, orange text = changed since Mark. Tap Mark, spin the front wheel by hand and watch which bytes light up. A name under an ID means other KTMs use it: tap the name for the byte map, what to test, and a Custom signals line (tap that line to copy it). Those layouts come from other bikes, so a value marked with a cross probably isn't this bike's.",
             color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
         MonoBox {
+            if (vm.sniffSummary.value.isNotEmpty())
+                Text(vm.sniffSummary.value, color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
             if (vm.sniffMsg.value.isNotEmpty()) Text(vm.sniffMsg.value, color = C.Muted, fontSize = 12.sp)
-            vm.sniffRows.forEach { ByteRowView(it) }
+            vm.sniffRows.forEach { SniffRowView(vm, it, copy) }
         }
+        KButton("Copy capture report", {
+            val t = vm.sniffReport()
+            if (t.isEmpty()) vm.toast.value = "Nothing captured yet" else copy(t, "Capture copied")
+        }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
 
         Heading("Watch a request")
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -612,6 +631,61 @@ private fun ByteRowView(r: ByteRow) {
             fontFamily = FontFamily.Monospace, fontSize = 13.sp
         )
         if (r.ranges.isNotEmpty()) Text(r.ranges, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = C.Muted)
+    }
+}
+
+/** A sniffer row, plus (if other KTMs use this ID) a tappable name that opens what each byte might mean. */
+@Composable
+private fun SniffRowView(vm: ObdukeViewModel, r: ByteRow, onCopy: (String, String) -> Unit) {
+    ByteRowView(r)
+    val k = r.known ?: return
+    val open = vm.sniffOpen[r.id] == true
+    Text(
+        (if (open) "▾ " else "▸ ") + k.name, color = C.Orange2, fontSize = 12.sp,
+        modifier = Modifier.fillMaxWidth().clickable { vm.sniffOpen[r.id] = !open }.padding(bottom = 4.dp)
+    )
+    if (open) KnownDetail(vm.known, k, r.data, onCopy)
+}
+
+@Composable
+private fun KNote(t: String) = Text(t, color = C.Muted, fontSize = 11.sp)
+
+@Composable
+private fun KnownDetail(known: KnownIds, e: KEntry, d: IntArray, onCopy: (String, String) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(start = 10.dp, bottom = 6.dp)) {
+        if (e.bikes.isNotEmpty())
+            KNote("Seen on: " + e.bikes.entries.joinToString(" · ") { "${known.bikeNames[it.key] ?: it.key} (${it.value})" })
+        if (e.tryIt.isNotEmpty()) KNote("Test: ${e.tryIt}")
+        if (e.note.isNotEmpty()) KNote(e.note)
+        e.fields.forEach { f ->
+            if (f.text != null) {
+                KNote("D${f.b}  ${f.text}")
+            } else {
+                val v = known.value(f, d)
+                val ok = v != null && v.ok
+                Column(Modifier.fillMaxWidth().padding(top = 5.dp).alpha(if (ok) 1f else 0.6f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(f.name, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        Text(
+                            if (f.n > 1) "D${f.b}-D${f.b + f.n - 1}" else "D${f.b}",
+                            color = C.Muted, fontSize = 11.sp, fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (v == null) "-" else (if (v.ok) "" else "✗ ") + v.text,
+                            color = if (ok) C.Ok else C.Warn, fontSize = 12.sp, fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    KNote(f.bikes.entries.joinToString(" · ") { "${it.key} ${it.value}" } + (if (f.note.isNotEmpty()) " - ${f.note}" else ""))
+                    val sig = known.signalLine(e, f)
+                    if (sig.isNotEmpty())
+                        Text(
+                            sig, color = C.Muted, fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.clickable { onCopy(sig, "Custom signal line copied") }
+                        )
+                }
+            }
+        }
     }
 }
 

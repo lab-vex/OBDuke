@@ -43,8 +43,8 @@ class DemoLink : ObdLink {
         settings.clear()
         for (d in DEFS) settings[d.key] = d.def
         // two custom signals, so the dashboard shows what they look like
-        settings["sig1"] = "120:2:2:b:0.01:0:Front wheel:km/h"
-        settings["sig2"] = "120:4:2:b:0.01:0:Rear wheel:km/h"
+        settings["sig1"] = "12B:0:2:b:0.05627:0:Front wheel:km/h"
+        settings["sig2"] = "12B:2:2:b:0.05627:0:Rear wheel:km/h"
         stored = mutableListOf("P0130"); pending = mutableListOf("P0505"); absCodes = mutableListOf("C0035")
     }
 
@@ -251,7 +251,7 @@ class DemoLink : ObdLink {
             val f = settings["sig$i"]!!.split(":")
             sigs.put(JSONObject().put("k", "c$i").put("n", f.getOrElse(6) { "Signal $i" }).put("u", f.getOrElse(7) { "" }))
         }
-        return JSONObject().put("t", "status").put("ok", true).put("fw", "1.2.1 (demo)")
+        return JSONObject().put("t", "status").put("ok", true).put("fw", "1.2.2 (demo)")
             .put("ecu", true).put("ecu_id", "7E8").put("can", "500k").put("ktm_rpm", true)
             .put("fi", if (stored.isEmpty()) 0 else 1).put("dtc", stored.size)
             .put("uptime", (now() + 600).toLong()).put("heap", 143360).put("tracker", false)
@@ -298,18 +298,32 @@ class DemoLink : ObdLink {
         return JSONObject().put("t", "peek").put("ok", true).put("req", req.joinToString(" ")).put("hex", resp.joinToString(" "))
     }
 
-    /** Pretend broadcast traffic on the bike's CAN bus. */
+    /**
+     * Pretend broadcast traffic. The layouts follow the KTM table in assets/can_ids.json (the 690-style ones), so the
+     * sniffer labels and decodes them; 3C5 is invented and not in the table, to show what an unknown ID looks like.
+     */
     private fun busFrames(t: Double): List<Pair<String, List<Int>>> {
         val s = sample(t)
         val rpm = s["rpm"]!!.toInt()
-        val f = (s["spd"]!! * 100).toInt()
-        val r = (s["spd"]!! * 102).toInt()
-        val tick = (t * 10).toInt() and 0xFF
+        val spd = s["spd"]!!
+        val f = (spd / 0.05627).toInt()
+        val r = (spd * 1.02 / 0.05627).toInt()
+        val thr = (s["tps"]!! / 0.3953).toInt().coerceIn(0, 255)
+        val gear = s["gear"]!!.toInt().coerceIn(0, 6)
+        val tick = (t * 10).toInt()
+        val braking = (t % 12.0) in 8.0..9.5
+        val brake = if (braking) 6000 else 0
+        val coolant = (s["ect"]!! * 10).toInt()
+        val odo = 123456                                   // 12345.6 km
         return listOf(
-            "120" to listOf(tick, 0x00, f shr 8 and 0xFF, f and 0xFF, r shr 8 and 0xFF, r and 0xFF, 0x00, 0x00),
-            "12B" to listOf(rpm shr 8 and 0xFF, rpm and 0xFF, s["tps"]!!.toInt() * 2, s["gear"]!!.toInt(), 0x00, 0x00, 0x00, tick),
-            "540" to listOf(0x01, 0x40, 0x00, 0x00, 0x3C, 0x00, 0x00, 0x00),
-            "550" to listOf(s["ect"]!!.toInt() + 40, s["iat"]!!.toInt() + 40, (s["vbat"]!! * 10).toInt(), 0x00, 0x00, 0x00, 0x00, 0x00),
+            "120" to listOf(rpm shr 8 and 0xFF, rpm and 0xFF, thr, 0x10, 0x00, 0x00, 0x00, (tick * 0x20) and 0xFF),
+            "129" to listOf(gear shl 4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, (tick * 0x20 + 0x20) and 0xFF),
+            "12B" to listOf(f shr 8 and 0xFF, f and 0xFF, r shr 8 and 0xFF, r and 0xFF, 0x00, 0x00, 0x00, 0x00),
+            "290" to listOf(brake shr 8 and 0xFF, brake and 0xFF, 0x00, if (braking) 0x0C else 0x00, 0x00, 0x00, 0x00, 0x00),
+            "3C5" to listOf(0x00, 0x10, tick and 0xFF, 0xA5, 0x00, 0x00, 0x00, 0x00),
+            "540" to listOf(0x00, rpm shr 8 and 0xFF, rpm and 0xFF, gear, 0x01, 0x00, coolant shr 8 and 0xFF, coolant and 0xFF),
+            "550" to listOf(if ((tick / 10) % 2 == 0) 0x00 else 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, tick and 0xFF),
+            "55A" to listOf(odo shr 16 and 0xFF, odo shr 8 and 0xFF, odo and 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00),
             "7E8" to listOf(0x04, 0x41, 0x0C, rpm * 4 shr 8 and 0xFF, rpm * 4 and 0xFF, 0x00, 0x00, 0x00)
         )
     }
@@ -335,7 +349,7 @@ class DemoLink : ObdLink {
                 if (prev != null && prev[i] != b) chg = chg or (1 shl i)
             }
             sniffPrev[id] = d
-            val hz = when (id) { "120", "12B" -> 100.0; "7E8" -> 6.5; else -> 10.0 }
+            val hz = when (id) { "12B", "290" -> 100.0; "120", "129", "3C5" -> 50.0; "540" -> 10.0; "550" -> 5.0; "55A" -> 1.0; "7E8" -> 6.5; else -> 10.0 }
             val secs = (System.currentTimeMillis() - sniffStart) / 1000.0
             ids.put(JSONObject().put("id", id).put("n", (hz * secs).toInt() + 1).put("hz", hz).put("age", 10)
                 .put("d", d.joinToString(" ") { hex(it) }).put("c", chg).put("m", mk)
