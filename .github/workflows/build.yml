@@ -70,10 +70,18 @@ jobs:
       - name: Signing key
         env:
           KS_B64: ${{ secrets.OBDUKE_KEYSTORE_B64 }}
+          KS_PW: ${{ secrets.OBDUKE_KEYSTORE_PASSWORD }}
         run: |
           if [ -n "$KS_B64" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/obduke.jks"
+            # strip any spaces / line breaks picked up when pasting the secrets
+            printf '%s' "$KS_B64" | tr -d ' \r\n\t' | base64 -d > "$RUNNER_TEMP/obduke.jks" \
+              || { echo "::error::OBDUKE_KEYSTORE_B64 isn't valid base64 - re-paste it"; exit 1; }
+            PW=$(printf '%s' "$KS_PW" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            keytool -list -keystore "$RUNNER_TEMP/obduke.jks" -storepass "$PW" -alias obduke >/dev/null 2>&1 \
+              || { echo "::error::Signing key won't open: OBDUKE_KEYSTORE_PASSWORD doesn't match OBDUKE_KEYSTORE_B64 (check for typos or a truncated paste)"; exit 1; }
+            echo "::add-mask::$PW"
             echo "OBDUKE_KEYSTORE=$RUNNER_TEMP/obduke.jks" >> "$GITHUB_ENV"
+            echo "OBDUKE_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
           else
             if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               echo "::error::Repo secret OBDUKE_KEYSTORE_B64 isn't set, so a release can't be signed"; exit 1
@@ -90,8 +98,6 @@ jobs:
 
       - name: Build APK
         working-directory: android
-        env:
-          OBDUKE_KEYSTORE_PASSWORD: ${{ secrets.OBDUKE_KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
           gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee "$RUNNER_TEMP/gradle.log"
