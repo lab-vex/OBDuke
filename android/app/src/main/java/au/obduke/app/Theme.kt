@@ -124,8 +124,7 @@ fun PasswordField(
             else androidx.compose.ui.text.input.PasswordVisualTransformation(),
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
             keyboardType = if (shown) androidx.compose.ui.text.input.KeyboardType.Text
-                else androidx.compose.ui.text.input.KeyboardType.Password,
-            autoCorrect = false
+                else androidx.compose.ui.text.input.KeyboardType.Password
         ),
         trailingIcon = {
             IconButton({ shown = !shown }) {
