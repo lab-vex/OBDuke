@@ -1,0 +1,81 @@
+# Builds the ESP32 firmware and the Android app on every push.
+# Download the results from the run's "Artifacts" section.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Firmware logic tests (simulated Duke)
+        run: ./test/run.sh
+
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core 3.3.12
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.3.12
+
+      - name: Compile
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
+            --warnings default \
+            --output-dir out \
+            firmware/obduke
+          ls -la out
+
+      - name: Name the binaries
+        run: |
+          mkdir dist
+          cp out/obduke.ino.bin dist/obduke-firmware.bin
+          # merged = bootloader + partitions + app, flash at 0x0 with any ESP flasher
+          if [ -f out/obduke.ino.merged.bin ]; then cp out/obduke.ino.merged.bin dist/obduke-firmware-full.bin; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obduke-firmware
+          path: dist/
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Name the APK
+        run: |
+          mkdir dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/obduke-app.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obduke-app
+          path: dist/
