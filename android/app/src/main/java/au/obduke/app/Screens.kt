@@ -61,6 +61,12 @@ fun ConnectScreen(vm: ObdukeViewModel, onAskBt: () -> Unit, onBtSettings: () -> 
                 enabled = st == LinkState.IDLE && (!useBt || (vm.btAllowed.value && vm.btAddr.value.isNotBlank())),
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(8.dp))
+            KButton("Try demo mode", { vm.connectDemo() }, enabled = st == LinkState.IDLE, modifier = Modifier.fillMaxWidth())
+            Text(
+                "No unit handy? Demo mode plays a pretend ride with some stored codes, so you can try every screen.",
+                color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)
+            )
         }
 
         Heading("Connect over")

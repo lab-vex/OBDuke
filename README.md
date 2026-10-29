@@ -22,6 +22,8 @@ One unit, three ways in:
 
 The ESP32-WROOM-32E doesn't have enough RAM to run Wi-Fi, Bluetooth Classic and BLE together, so everything Bluetooth goes over one Bluetooth Classic serial link. The OBDuke app's commands start with `!` and get JSON back; everything else is treated as ELM327, so Torque and the tracker work as before.
 
+**New in app 1.3:** demo mode. No unit handy? Tap **Try demo mode** on the Connect screen for a pretend bike with live data, stored codes, modules, sniffer and logging, so you can try every screen.
+
 **New in 1.2:** the Android app connects over Bluetooth (default) or Wi-Fi, with every web page feature on both.
 
 **New in 1.1:** hotspot address 1.1.1.1, Torque Pro support, bus sniffer, ABS / other module codes, watch tool, gear indicator, custom signals (e.g. front/rear wheel speed once found), peak hold.

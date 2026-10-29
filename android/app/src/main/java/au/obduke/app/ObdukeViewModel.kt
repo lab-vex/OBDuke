@@ -39,6 +39,9 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("obduke", Context.MODE_PRIVATE)
     val wifi = WifiLink(app)
     val bt = BtLink(app)
+    val demoLink = DemoLink()
+    /** True while connected to the pretend unit (no hardware needed). */
+    val demo = mutableStateOf(false)
 
     /** "bt" = Bluetooth (default), "wifi" = the OBDuke hotspot. */
     val transport = mutableStateOf(prefs.getString("transport", "bt")!!)
@@ -47,8 +50,8 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
     /** Set by MainActivity once the Bluetooth permission is granted (always true below Android 12). */
     val btAllowed = mutableStateOf(false)
 
-    val link: ObdLink get() = if (transport.value == "bt") bt else wifi
-    val linkName get() = if (transport.value == "bt") "Bluetooth" else "Wi-Fi"
+    val link: ObdLink get() = when { demo.value -> demoLink; transport.value == "bt" -> bt; else -> wifi }
+    val linkName get() = when { demo.value -> "Demo mode (simulated unit)"; transport.value == "bt" -> "Bluetooth"; else -> "Wi-Fi" }
 
     // connection
     val linkState = mutableStateOf(LinkState.IDLE)
@@ -295,6 +298,23 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Connect to the built-in pretend unit, to try the app without hardware. */
+    fun connectDemo() {
+        if (linkState.value != LinkState.IDLE) return
+        demo.value = true
+        try {
+            handle(demoLink.connect())
+            failStreak = 0
+            linkState.value = LinkState.CONNECTED
+            connectMsg.value = ""
+            toast.value = "Demo mode: simulated bike, nothing is real"
+        } catch (e: Exception) {
+            demoLink.disconnect()
+            demo.value = false
+            connectMsg.value = e.message ?: "Couldn't start demo mode"
+        }
+    }
+
     fun tryAutoConnect() {
         if (!autoConnect.value || linkState.value != LinkState.IDLE) return
         if (transport.value == "bt" && (!btAllowed.value || btAddr.value.isBlank() || !bt.isOn)) return
@@ -307,6 +327,8 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
         watchJob?.cancel(); watchOn.value = false
         wifi.disconnect()
         bt.disconnect()
+        demoLink.disconnect()
+        demo.value = false
         linkState.value = LinkState.IDLE
         ecu.value = false
         busy.value = null
@@ -620,7 +642,7 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
         watchMsg.value = ""
     }
 
-    override fun onCleared() { wifi.disconnect(); bt.disconnect() }
+    override fun onCleared() { wifi.disconnect(); bt.disconnect(); demoLink.disconnect() }
 
     companion object {
         const val DEFAULT_HOST = "1.1.1.1"

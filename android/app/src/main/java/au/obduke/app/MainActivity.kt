@@ -156,6 +156,7 @@ class MainActivity : ComponentActivity() {
     private fun StatusPill(connected: Boolean) {
         val (text, color) = when {
             !connected -> "Offline" to C.Muted
+            vm.demo.value -> "Demo" to C.Orange
             vm.ecu.value -> "ECU OK" to C.Ok
             else -> "No ECU" to C.Bad
         }
