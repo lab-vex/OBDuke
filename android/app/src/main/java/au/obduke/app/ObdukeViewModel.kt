@@ -177,12 +177,11 @@ class ObdukeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val r = updater.check(ghToken.value)
-                when {
-                    r == null -> updStatus.value = "Up to date (${Updater.CURRENT})"
+                if (r == null) updStatus.value = "Up to date (${Updater.CURRENT})"
+                else {
+                    updStatus.value = "Version ${r.version} available"
                     // on launch, don't nag about a version the user already said "Later" to
-                    !manual && prefs.getString("upd_skip", "") == r.version ->
-                        updStatus.value = "Version ${r.version} available"
-                    else -> { updStatus.value = "Version ${r.version} available"; update.value = r }
+                    if (manual || prefs.getString("upd_skip", "") != r.version) update.value = r
                 }
                 prefs.edit().putLong("upd_last", System.currentTimeMillis()).apply()
             } catch (e: Exception) {

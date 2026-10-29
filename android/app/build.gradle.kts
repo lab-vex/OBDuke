@@ -25,14 +25,16 @@ android {
     val ksProps = java.util.Properties().apply {
         rootProject.file("signing/keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
     }
-    val ks = System.getenv("OBDUKE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    // CI passes "" for a secret that isn't set, so treat blank env vars as missing
+    fun env(name: String) = System.getenv(name)?.takeIf { it.isNotBlank() }
+    val ks = env("OBDUKE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
         ?: repoKs.takeIf { it.exists() }
     signingConfigs {
         if (ks != null) create("obduke") {
             storeFile = ks
-            storePassword = System.getenv("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("storePassword")
+            storePassword = env("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("storePassword")
             keyAlias = ksProps.getProperty("keyAlias") ?: "obduke"
-            keyPassword = System.getenv("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("keyPassword")
+            keyPassword = env("OBDUKE_KEYSTORE_PASSWORD") ?: ksProps.getProperty("keyPassword")
         }
     }
     val signer = if (ks != null) signingConfigs.getByName("obduke") else signingConfigs.getByName("debug")

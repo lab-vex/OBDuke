@@ -89,7 +89,16 @@ jobs:
         working-directory: android
         env:
           OBDUKE_KEYSTORE_PASSWORD: ${{ secrets.OBDUKE_KEYSTORE_PASSWORD }}
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+
+      # Turn compile errors into annotations, readable without downloading the full log
+      - name: Show build errors
+        if: failure()
+        run: |
+          grep -E "^e: |What went wrong|^> |Execution failed|password|keystore" "$RUNNER_TEMP/gradle.log" \
+            | head -25 | while IFS= read -r l; do echo "::error::$l"; done
 
       - name: Name the APK
         run: |
