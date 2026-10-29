@@ -2,7 +2,7 @@
   "version": 1,
   "about": "Known KTM-family CAN broadcast IDs, for labelling the bus sniffer. Every layout here comes from OTHER bikes. Nobody has published a capture from a 2013-16 (Gen 1) Duke, so treat each row as a hint to test on your bike, not a fact. Edit this file, then run tools/gen_can_ids.py.",
   "status": {
-    "confirmed": "checked against the dash or the bike's behaviour by that project's owner",
+    "confirmed": "checked against the dash or the bike's behaviour, by the project's owner or against a labelled capture log",
     "capture": "found in a real capture, not cross-checked (unit or meaning may be a guess)",
     "reported": "stated in a forum post, no capture to check",
     "candidate": "educated guess from the byte pattern"
@@ -12,7 +12,8 @@
     "Adv390": "KTM 390 Adventure (Gen 2), 2026",
     "701": "Husqvarna 701 Enduro (Euro 5), 2023",
     "1290": "KTM 1290 Super Duke R, 2017",
-    "890": "KTM 890 Duke (790 Duke forum posts)"
+    "890": "KTM 890 Duke (790 Duke forum posts)",
+    "1390": "KTM 1390 Super Duke R Evo, 2024"
   },
   "sources": {
     "ktmcan": { "title": "blalor/ktm-can (690 Enduro R; decoding credited to Dan Plastina's 1290 Super Duke thread, 2017)", "url": "https://github.com/blalor/ktm-can" },
@@ -20,19 +21,21 @@
     "adv390": { "title": "jayasuryashaju/adv390-dash, docs/DECODING.md (390 Adventure Gen 2 captures)", "url": "https://github.com/jayasuryashaju/adv390-dash" },
     "hq701": { "title": "jroal/701display (Husqvarna 701 Enduro, firmware source)", "url": "https://github.com/jroal/701display" },
     "vault890": { "title": "giacomoschito/ktm-890-vault (890 Duke notes quoting 790dukeforum.com)", "url": "https://github.com/giacomoschito/ktm-890-vault" },
+    "ktm1390": { "title": "sruon/ktm-1390-can (1390 Super Duke R Evo: README plus 17 candump logs, which I checked the README against)", "url": "https://github.com/sruon/ktm-1390-can" },
+    "racechrono": { "title": "RaceChrono forum: KTM 890 Duke R CAN-bus thread (RaceChrono PIDs are decimal: 299 = 0x12B, 303 = 0x12F)", "url": "https://racechrono.com/forum/discussion/comment/12434/" },
     "advrider": { "title": "ADVrider: Results from hacking the KTM SuperDuke 1290 CAN bus (quoted by ktm-can)", "url": "https://www.advrider.com/f/threads/results-from-hacking-the-ktm-superduke-1290-can-bus.1200087/" }
   },
   "ids": [
     {
       "id": "120", "name": "Engine: rpm, throttle, switches", "ms": 20, "from": "engine ECU",
       "try": "Key on, then rev the engine or twist the grip. Flip the kill switch. Press start.",
-      "src": ["ktmcan", "ktmcomp", "adv390", "vault890"],
+      "src": ["ktmcan", "ktmcomp", "adv390", "vault890", "ktm1390"],
       "fields": [
-        { "name": "Engine speed", "b": 0, "n": 2, "unit": "rpm", "min": 0, "max": 14000, "bikes": { "690": "confirmed", "Adv390": "confirmed" } },
-        { "name": "Throttle grip (commanded)", "b": 2, "mul": 0.3953, "dp": 0, "unit": "%", "min": 0, "max": 101, "bikes": { "690": "confirmed", "Adv390": "confirmed", "890": "reported" }, "note": "raw 0 = closed, 253-255 = fully open" },
+        { "name": "Engine speed", "b": 0, "n": 2, "unit": "rpm", "min": 0, "max": 14000, "bikes": { "690": "confirmed", "Adv390": "confirmed", "1390": "confirmed" } },
+        { "name": "Throttle grip (commanded)", "b": 2, "mul": 0.3953, "dp": 0, "unit": "%", "min": 0, "max": 101, "bikes": { "690": "confirmed", "Adv390": "confirmed", "890": "reported", "1390": "capture" }, "note": "raw 0 = closed, 253-255 = fully open. 1390 Evo: 0 at idle, 24-44 on the blips in the start-up log" },
         { "name": "Kill switch", "b": 3, "shift": 4, "bits": 1, "yes": "RUN", "no": "STOP", "bikes": { "690": "confirmed" } },
-        { "name": "Kill switch", "b": 3, "shift": 3, "bits": 1, "yes": "RUN", "no": "STOP", "bikes": { "Adv390": "confirmed" }, "note": "the same bit the 690 uses for the kill switch is the start button here" },
-        { "name": "Start button", "b": 3, "shift": 4, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "Adv390": "confirmed" } },
+        { "name": "Kill switch", "b": 3, "shift": 3, "bits": 1, "yes": "RUN", "no": "STOP", "bikes": { "Adv390": "confirmed", "1390": "confirmed" }, "note": "the same bit the 690 uses for the kill switch is the start button here. 1390 Evo: 08 with the switch on RUN, 00 on STOP" },
+        { "name": "Start button", "b": 3, "shift": 4, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "Adv390": "confirmed", "1390": "confirmed" }, "note": "1390 Evo: D3 = 18 while cranking" },
         { "name": "Throttle map in use", "b": 4, "shift": 0, "bits": 1, "map": { "0": "map 1", "1": "map 2" }, "bikes": { "690": "confirmed" } },
         { "name": "Ride mode", "b": 4, "map": { "0": "Street", "1": "Offroad", "2": "Rain" }, "bikes": { "Adv390": "capture" }, "note": "names assumed from the menu order" },
         { "b": 7, "text": "alive counter, steps by 0x20 (30, 50, 70, 90, B0, D0)" }
@@ -41,8 +44,8 @@
     {
       "id": "121", "name": "Throttle grip sensors", "ms": 20, "from": "engine ECU",
       "try": "Twist the grip with the key on. Two bytes should rise together.",
-      "src": ["ktmcomp", "adv390"],
-      "note": "D1 and D3 rise with the grip: probably the two redundant ride-by-wire sensors.",
+      "src": ["ktmcomp", "adv390", "ktm1390"],
+      "note": "D1 and D3 rise with the grip: probably the two redundant ride-by-wire sensors. 1390 Evo: D5 tracked engine speed closely in the start-up log (correlation 0.8), so the layout may differ there.",
       "fields": [
         { "name": "Grip sensor A?", "b": 1, "bikes": { "690": "candidate" } },
         { "name": "Grip sensor B?", "b": 3, "bikes": { "690": "candidate" } },
@@ -52,8 +55,8 @@
     {
       "id": "128", "name": "Throttle closed switch", "ms": 20, "from": "key-on",
       "try": "Key on: twist the grip off its stop and let go.",
-      "src": ["adv390", "ktmcomp"],
-      "note": "690: reads 7F FF ... until the ECU wakes, then D2 toggles 02/03 with the engine running.",
+      "src": ["adv390", "ktmcomp", "ktm1390"],
+      "note": "690: reads 7F FF ... until the ECU wakes, then D2 toggles 02/03 with the engine running. 1390 Evo: D0-D1 stay 13 88 and D2 steps 01, 02, 03 through a start-up, so there it is a state, not a throttle switch (the repo README says gear and clutch live here, but its clutch log shows them in 129).",
       "fields": [
         { "name": "Throttle", "b": 2, "shift": 0, "bits": 1, "yes": "closed", "no": "open", "bikes": { "Adv390": "confirmed", "690": "candidate" } }
       ]
@@ -61,18 +64,18 @@
     {
       "id": "129", "name": "Gear and clutch", "ms": 20, "from": "engine ECU",
       "try": "Key on, engine off: roll the bike and change gear. Pull the clutch lever.",
-      "src": ["ktmcan", "ktmcomp", "adv390", "hq701", "vault890"],
-      "note": "701 Enduro: the 701display firmware watches D0 bit 3 going LOW to spot the off-road ABS button being held while stopped.",
+      "src": ["ktmcan", "ktmcomp", "adv390", "hq701", "vault890", "ktm1390"],
+      "note": "701 Enduro: the 701display firmware watches D0 bit 3 going LOW to spot the off-road ABS button being held while stopped. 1390 Evo: the clutch bit toggled in its lever-pull log; gear stayed 0 (neutral) in every log, so gear is unchecked there.",
       "fields": [
         { "name": "Gear", "b": 0, "shift": 4, "bits": 4, "map": { "0": "N" }, "min": 0, "max": 6, "bikes": { "690": "confirmed", "Adv390": "confirmed", "890": "reported" } },
-        { "name": "Clutch", "b": 0, "shift": 3, "bits": 1, "yes": "PULLED", "no": "released", "bikes": { "690": "confirmed", "Adv390": "confirmed", "890": "reported" } },
+        { "name": "Clutch", "b": 0, "shift": 3, "bits": 1, "yes": "PULLED", "no": "released", "bikes": { "690": "confirmed", "Adv390": "confirmed", "890": "reported", "1390": "confirmed" } },
         { "b": 7, "text": "alive counter, steps by 0x20 (20, 40, 60, 80, A0, C0)" }
       ]
     },
     {
       "id": "12A", "name": "Ride mode, traction and ABS states", "ms": 50, "from": "key-on",
       "try": "Bike stopped: change ride mode, press the TC button, switch ABS mode.",
-      "src": ["ktmcan", "ktmcomp", "adv390", "hq701"],
+      "src": ["ktmcan", "ktmcomp", "adv390", "hq701", "ktm1390"],
       "note": "The bit positions differ between models, so try each variant against what you change.",
       "fields": [
         { "name": "Throttle", "b": 0, "shift": 1, "bits": 1, "yes": "closed", "no": "open", "bikes": { "690": "capture" } },
@@ -81,14 +84,16 @@
         { "name": "Off-road ABS mode", "b": 2, "shift": 0, "bits": 1, "yes": "OFF-ROAD", "no": "road", "bikes": { "701": "capture" } },
         { "name": "Traction control (second bit)", "b": 4, "shift": 5, "bits": 1, "yes": "set", "no": "clear", "bikes": { "Adv390": "capture" } },
         { "name": "ABS mode (second bit)", "b": 4, "shift": 3, "bits": 1, "yes": "set", "no": "clear", "bikes": { "Adv390": "capture" } },
-        { "name": "ABS mode", "b": 6, "map": { "2": "mode A", "4": "mode B" }, "bikes": { "Adv390": "capture" }, "note": "names not known" }
+        { "name": "ABS mode", "b": 6, "map": { "2": "mode A", "4": "mode B" }, "bikes": { "Adv390": "capture" }, "note": "names not known" },
+        { "name": "Slip adjuster (MTC) level", "b": 3, "mul": 0.25, "dp": 0, "min": 0, "max": 15, "bikes": { "1390": "confirmed" }, "note": "1C = 7, 20 = 8, 24 = 9 while stepping the slip adjuster 7, 8, 9, 8, 7" },
+        { "b": 2, "text": "1390 Evo: D2 high nibble is 7 in Performance and 1 in Rain (anti-wheelie level, per the repo). D4 moved with the ride mode (60, 44, 04, 24 seen)." }
       ]
     },
     {
       "id": "12B", "name": "ABS wheel speeds and lean", "ms": 10, "from": "ABS",
       "try": "Bike on a stand, key on: spin the front wheel by hand, then the rear. Lean the bike on the stand for tilt and lean.",
-      "src": ["ktmcan", "ktmcomp", "hq701", "advrider"],
-      "note": "Not sent at all on the 390 Adventure (Gen 2). Scale: 701 Enduro fitted 17.77 counts per km/h against its OBD speed; the 690 speedometer gave about 17.0. Lean: 0 is upright, 1 and up lean right, FFF and down lean left (1290 thread). A 790 forum post (no ID given) says speed is (D0*256+D1)/16, unverified.",
+      "src": ["ktmcan", "ktmcomp", "hq701", "advrider", "racechrono", "ktm1390"],
+      "note": "Not sent at all on the 390 Adventure (Gen 2) or the 1390 Evo (no 12B in any of its 17 logs); a RaceChrono commenter says 0x12B does not carry wheel speed on the 890 R. Scale: 701 Enduro fitted 17.77 counts per km/h against its OBD speed; the 690 speedometer gave about 17.0. Lean: 0 is upright, 1 and up lean right, FFF and down lean left (1290 thread). A 790 forum post (no ID given) says speed is (D0*256+D1)/16, unverified. One RaceChrono commenter (hedged with 'if I remember correctly') put front and rear wheel speed at PID 299 (= 0x12B) as bit ranges, calling them ABS pulse frequencies, which fits the layout here; another says 299 carries no wheel speed on the 890 R.",
       "fields": [
         { "name": "Front wheel speed", "b": 0, "n": 2, "mul": 0.05627, "dp": 1, "unit": "km/h", "min": 0, "max": 280, "bikes": { "690": "confirmed", "701": "confirmed" } },
         { "name": "Rear wheel speed", "b": 2, "n": 2, "mul": 0.05627, "dp": 1, "unit": "km/h", "min": 0, "max": 280, "bikes": { "690": "confirmed" }, "note": "agrees with the front within about 3%" },
@@ -107,33 +112,48 @@
     {
       "id": "12D", "name": "Rear wheel speed (390 Adventure)", "from": "ABS?",
       "try": "Bike on a stand: spin the rear wheel by hand. Compare with the dash on a ride.",
-      "src": ["adv390"],
+      "src": ["adv390", "ktm1390"],
+      "note": "Also sent on the 1390 Evo (about every 10 ms); with the wheels still only the counter in D7 changed.",
       "fields": [
         { "name": "Rear wheel speed", "b": 1, "n": 2, "mul": 0.1, "dp": 1, "unit": "km/h?", "min": 0, "max": 280, "bikes": { "Adv390": "capture" }, "note": "a per-pulse count; the unit (0.1 km/h per count) is a guess, calibrate against the dash" }
       ]
     },
     {
       "id": "12E", "name": "Smoothed speed (390 Adventure)", "from": "ABS?",
-      "src": ["adv390", "ktmcomp"],
-      "note": "690: D0 is a status flag (00/40) and D7 a counter.",
+      "src": ["adv390", "ktmcomp", "ktm1390"],
+      "note": "690: D0 is a status flag (00/40) and D7 a counter. Also sent on the 1390 Evo; with the bike still D6 and D7 changed there.",
       "fields": [
         { "name": "Speed, smoothed", "b": 1, "n": 2, "mul": 0.1, "dp": 1, "unit": "km/h?", "min": 0, "max": 280, "bikes": { "Adv390": "capture" }, "note": "about 0.7 x the 12D value, fades out after the wheel stops" }
       ]
     },
     {
-      "id": "12F", "name": "Lean or rear brake? (390 Adventure)", "ms": 10, "from": "key-on",
+      "id": "12F", "name": "Lean angle (rear brake?)", "ms": 10, "from": "key-on",
       "try": "Tilt the bike on its stand. Then press only the rear pedal. See which one moves D0-D1.",
-      "src": ["adv390"],
-      "note": "That project claims both uses for D0-D1 and has not settled it. D1 bit 0x20 also flips in bursts (a status bit, not identified).",
+      "src": ["adv390", "ktm1390", "racechrono"],
+      "note": "Evidence for lean: on the 1390 Evo D0-D1 sat at F83x (-125 counts) with the bike upright on its stand and ignored the rear pedal, and a RaceChrono commenter guesses lean/tilt is at PID 303 (= 0x12F) on the 890 R, which has the newer Super Duke ABS (a guess, no capture). The 390 Adventure project claims both uses for D0-D1 and has not settled it. D1 bit 0x20 also flips in bursts there (a status bit, not identified).",
       "fields": [
-        { "name": "Lean angle (raw)", "b": 0, "n": 2, "shift": 4, "bits": 12, "signed": true, "bikes": { "Adv390": "capture" }, "note": "tilted by hand on the stand: negative left, positive right" },
-        { "name": "Rear brake (raw)", "b": 0, "n": 2, "unit": "raw", "bikes": { "Adv390": "capture" }, "note": "rests near 304, rises 50-90 with the pedal" }
+        { "name": "Lean angle (raw)", "b": 0, "n": 2, "shift": 4, "bits": 12, "signed": true, "bikes": { "Adv390": "capture", "1390": "capture" }, "note": "tilted by hand on the stand: negative left, positive right. 1390 Evo upright on its stand: -125, jittering by 1-2 counts" },
+        { "name": "Rear brake (raw)", "b": 0, "n": 2, "unit": "raw", "bikes": { "Adv390": "capture" }, "note": "rests near 304, rises 50-90 with the pedal (390 Adventure). The 1390 Evo's D0-D1 did not move with the pedal" }
+      ]
+    },
+    {
+      "id": "140", "name": "Handlebar buttons (1390 Evo)", "ms": 20, "from": "switchgear",
+      "try": "With the key on, use the turn-signal switch, the cancel button and the high-beam flash and watch which bit pulses.",
+      "src": ["ktm1390"], "bikes": { "1390": "confirmed" },
+      "note": "Each button sets its own bit while held, and D2 rests at 03. The four below were checked against the repo's turn-signal and high-beam logs. The repo README counts bits from the left (its B0 is 0x80); everything here uses bit 0 = 0x01. Newer switchgear: whether a Gen 1 sends this is unknown.",
+      "fields": [
+        { "name": "Left turn signal button", "b": 0, "shift": 4, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "1390": "confirmed" } },
+        { "name": "Turn signal cancel button", "b": 0, "shift": 3, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "1390": "confirmed" } },
+        { "name": "Right turn signal button", "b": 0, "shift": 2, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "1390": "confirmed" } },
+        { "name": "High beam / flash button", "b": 1, "shift": 0, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "1390": "confirmed" } },
+        { "b": 0, "text": "Other bits, from the repo README only (not checked one by one): D0 bit 1 = C1, bit 0 = C2; D1 bit 7 = cruise, bit 4 = +/resume, bit 3 = -/set, bit 1 = horn; D2 bit 7 right, 6 left, 5 up, 4 down, 3 centre of the d-pad. D2 bit 2 also pulses in the button log." }
       ]
     },
     {
       "id": "174", "name": "Motion sensor (IMU)?", "ms": 10, "from": "key-on",
-      "src": ["ktmcomp"], "bikes": { "690": "candidate" },
+      "src": ["ktmcomp", "ktm1390"], "bikes": { "690": "candidate", "1390": "candidate" },
       "try": "Lean the bike on the stand and watch which of 174, 178 and 17C swings.",
+      "note": "Also on the 1390 Evo, where almost every byte jitters even with the bike upright on its stand.",
       "fields": [
         { "b": 0, "text": "two 16-bit values centred near 0x8000 (one offset by gravity); counter in D6 low nibble; checksum in D7" }
       ]
@@ -154,7 +174,7 @@
     },
     {
       "id": "178", "name": "Motion sensor (IMU)?", "ms": 10, "from": "key-on",
-      "src": ["ktmcomp"],
+      "src": ["ktmcomp", "ktm1390"], "bikes": { "1390": "candidate" },
       "try": "Lean the bike on the stand: D0-D1 should swing.",
       "fields": [
         { "name": "Lean candidate", "b": 0, "n": 2, "unit": "raw", "bikes": { "690": "candidate" }, "note": "swings most when the bike leans" },
@@ -163,7 +183,7 @@
     },
     {
       "id": "17C", "name": "Motion sensor (IMU)?", "ms": 10, "from": "key-on",
-      "src": ["ktmcomp"],
+      "src": ["ktmcomp", "ktm1390"], "bikes": { "1390": "candidate" },
       "try": "Lean the bike on the stand: D4-D5 should swing.",
       "fields": [
         { "name": "Lean candidate", "b": 4, "n": 2, "unit": "raw", "bikes": { "690": "candidate" }, "note": "swings most when the bike leans" },
@@ -173,11 +193,13 @@
     {
       "id": "290", "name": "Brake pressure and brake light", "ms": 10, "from": "ABS?",
       "try": "Key on: squeeze the front lever, then press the rear pedal.",
-      "src": ["ktmcan", "ktmcomp", "adv390", "vault890"],
+      "src": ["ktmcan", "ktmcomp", "adv390", "vault890", "ktm1390"],
       "note": "690: D2-D7 stay 0, so there is no brake-light bit there.",
       "fields": [
-        { "name": "Front brake pressure (raw)", "b": 0, "n": 2, "unit": "raw", "min": 0, "max": 40000, "bikes": { "690": "confirmed", "Adv390": "confirmed", "890": "reported" }, "note": "390 Adventure: rest noise up to about 48, firm stop 15,000-20,000" },
-        { "name": "Brake light (front or rear)", "b": 3, "shift": 2, "bits": 2, "map": { "0": "off", "3": "ON" }, "bikes": { "Adv390": "confirmed" }, "note": "D3 = 02 off, 0E on" }
+        { "name": "Front brake pressure (raw)", "b": 0, "n": 2, "unit": "raw", "min": 0, "max": 40000, "bikes": { "690": "confirmed", "Adv390": "confirmed", "890": "reported", "1390": "confirmed" }, "note": "390 Adventure: rest noise up to about 48, firm stop 15,000-20,000. 1390 Evo: 0 at rest, about 8,500 at the peak of a hard squeeze on the stand" },
+        { "name": "Front brake lever switch", "b": 3, "shift": 3, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "1390": "confirmed" }, "note": "D3 = 02 at rest, 0A with the lever" },
+        { "name": "Rear brake pedal switch", "b": 3, "shift": 2, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "1390": "confirmed" }, "note": "D3 = 06 with the pedal. Rear pedal pressure did not show in D0-D1 (peak 32)" },
+        { "b": 3, "text": "390 Adventure: D3 goes 02 to 0E when the brake light is on (both bits at once), unlike the 1390 Evo where each switch has its own bit" }
       ]
     },
     {
@@ -188,10 +210,25 @@
       ]
     },
     {
+      "id": "310", "name": "Not decoded (1390 Evo)", "ms": 100, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "D0-D3 are either 71 7A 4C 54 or FF FF FF FF (looks like four sensor values that read FF when invalid); D4-D5 stay 7D 7D. Meaning not known." } ]
+    },
+    {
+      "id": "400", "name": "Not decoded (1390 Evo)", "ms": 10, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "D0 reads 28 at rest and swings while the engine cranks (down to 0B, then back up); D1 is 80, sometimes C0; D7 is a counter. Meaning not known." } ]
+    },
+    {
+      "id": "410", "name": "Not decoded (1390 Evo)", "ms": 10, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "D0, D3 and D6 follow engine speed loosely (correlation about 0.7 in the start-up log); D1, D4 and D7 vary too. Meaning not known." } ]
+    },
+    {
       "id": "450", "name": "Buttons and ABS mode", "ms": 50, "from": "key-on",
       "try": "Press the TC button and the map button. Change ABS mode with the bike stopped.",
-      "src": ["ktmcan", "ktmcomp", "adv390"],
-      "note": "390 Adventure: D2 sits at 0x80 at rest, so the 690's TC-button bit may not apply.",
+      "src": ["ktmcan", "ktmcomp", "adv390", "ktm1390"],
+      "note": "390 Adventure: D2 sits at 0x80 at rest, so the 690's TC-button bit may not apply. 1390 Evo: the top bits of D2 step through 20, 40, 60 ... between logs (a slow counter), and D4 changed (1B, 13, 0B, 03) in the logs where the ride mode was switched.",
       "fields": [
         { "name": "TC button", "b": 2, "shift": 0, "bits": 1, "yes": "PRESSED", "no": "-", "bikes": { "690": "confirmed" } },
         { "name": "Map button / request", "b": 4, "map": { "0": "map 0", "9": "map 1" }, "bikes": { "690": "confirmed" } },
@@ -200,10 +237,23 @@
       ]
     },
     {
+      "id": "4E8", "to": "4E9", "name": "Start-up exchange (1390 Evo)", "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "note": "Only 12 frames in the whole set, right after key-on: 4E8 = 55 01 ..., 55 02 ..., 55 03 ... with random-looking bytes, 4E9 = 5A 01 01, 5A 02 01, 5A 03 01. Looks like a key or security exchange, so there is nothing to decode.",
+      "fields": []
+    },
+    {
+      "id": "4EA", "name": "Dashboard warning light?", "ms": 100, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "capture" },
+      "fields": [
+        { "name": "Orange warning light", "b": 4, "shift": 0, "bits": 1, "yes": "ON", "no": "off", "bikes": { "1390": "capture" }, "note": "D4 = 01 in the log taken with the kill switch off, all zero in every other log; the repo README names it as the dashboard's orange light" }
+      ]
+    },
+    {
       "id": "540", "name": "Slow status: coolant, gear, stand, fuel", "ms": 100, "from": "engine ECU",
       "try": "Key on: raise and lower the side stand. Warm the engine and compare coolant with the dash.",
-      "src": ["ktmcan", "ktmcomp", "adv390", "hq701"],
-      "note": "The 690 and 390 Adventure put coolant and the side stand one byte apart, so the variants disagree. Whichever gives a believable number is the one for your bike.",
+      "src": ["ktmcan", "ktmcomp", "adv390", "hq701", "ktm1390"],
+      "note": "The 690 and 390 Adventure put coolant and the side stand one byte apart, so the variants disagree. Whichever gives a believable number is the one for your bike. The 1390 Evo agrees with the 390 Adventure for coolant.",
       "fields": [
         { "name": "Engine speed (slow copy)", "b": 1, "n": 2, "unit": "rpm", "min": 0, "max": 14000, "bikes": { "690": "confirmed" } },
         { "name": "Gear (slow copy)", "b": 3, "shift": 0, "bits": 4, "map": { "0": "N", "7": "shifting" }, "min": 0, "max": 7, "bikes": { "690": "confirmed", "701": "capture" } },
@@ -211,8 +261,9 @@
         { "name": "Side stand fault", "b": 4, "shift": 7, "bits": 1, "yes": "FAULT", "no": "ok", "bikes": { "690": "capture" } },
         { "name": "Coolant", "b": 6, "n": 2, "mul": 0.1, "dp": 1, "unit": "°C", "min": -40, "max": 150, "bikes": { "690": "confirmed" } },
         { "name": "Side stand", "b": 3, "shift": 0, "bits": 1, "yes": "UP", "no": "DOWN", "bikes": { "Adv390": "confirmed" } },
-        { "name": "Coolant", "b": 5, "n": 2, "mul": 0.1, "dp": 1, "unit": "°C", "min": -40, "max": 150, "bikes": { "Adv390": "capture" }, "note": "96.2 after a ride; check against the dash" },
-        { "name": "Fuel flow (raw per second)", "b": 1, "n": 2, "le": true, "unit": "raw", "bikes": { "Adv390": "capture" }, "note": "0 off, about 27 just after start, 19-22 idling; litres per hour not calibrated" }
+        { "name": "Coolant", "b": 5, "n": 2, "mul": 0.1, "dp": 1, "unit": "°C", "min": -40, "max": 150, "bikes": { "Adv390": "capture", "1390": "capture" }, "note": "96.2 after a ride (390 Adventure). 1390 Evo: 95.8 in a warm-engine log, 15.4 on a cold key-on, climbing through a start-up; check against the dash" },
+        { "name": "Fuel flow (raw per second)", "b": 1, "n": 2, "le": true, "unit": "raw", "bikes": { "Adv390": "capture" }, "note": "0 off, about 27 just after start, 19-22 idling; litres per hour not calibrated" },
+        { "b": 3, "text": "1390 Evo: D3 reads 10 before the engine starts and 00 once it is running (meaning not known). D1 follows engine speed loosely but is not a clean copy." }
       ]
     },
     {
@@ -225,18 +276,29 @@
       ]
     },
     {
-      "id": "550", "name": "Status flag", "ms": 200, "from": "key-on",
-      "src": ["ktmcomp"], "bikes": { "690": "candidate" },
+      "id": "550", "name": "Lights and status flags", "ms": 200, "from": "key-on",
+      "src": ["ktmcomp", "ktm1390"], "bikes": { "690": "candidate", "1390": "confirmed" },
+      "try": "Switch the indicators, the hazards and the high beam on and off with the key on.",
       "fields": [
-        { "b": 0, "text": "D0 flips between 00 and 10; D7 is a counter" }
+        { "b": 0, "text": "690: D0 flips between 00 and 10; D7 is a counter" },
+        { "name": "Left indicator lit", "b": 2, "shift": 0, "bits": 1, "yes": "ON", "no": "off", "bikes": { "1390": "confirmed" }, "note": "toggles about every 0.4 s while flashing; both lit = hazards" },
+        { "name": "Right indicator lit", "b": 2, "shift": 1, "bits": 1, "yes": "ON", "no": "off", "bikes": { "1390": "confirmed" } },
+        { "name": "High beam lit", "b": 4, "shift": 4, "bits": 1, "yes": "ON", "no": "off", "bikes": { "1390": "confirmed" } },
+        { "name": "Daytime running light", "b": 4, "shift": 0, "bits": 1, "yes": "ON", "no": "off", "bikes": { "1390": "confirmed" } }
       ]
     },
     {
       "id": "551", "name": "Static with engine off (390 Adventure)", "from": "key-on",
-      "src": ["adv390"], "bikes": { "Adv390": "candidate" },
+      "src": ["adv390", "ktm1390"], "bikes": { "Adv390": "candidate", "1390": "candidate" },
+      "note": "1390 Evo: also static, 00 00 00 00 00 04 C0 00 in every log.",
       "fields": [
         { "b": 0, "text": "static with the engine off; capture again riding" }
       ]
+    },
+    {
+      "id": "552", "name": "Not decoded (1390 Evo)", "ms": 50, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "D0 and D7 vary (D7 looks like a counter); the other bytes stay put. Meaning not known." } ]
     },
     {
       "id": "553", "name": "Slow static: trip or service data?", "ms": 1000, "from": "key-on",
@@ -248,31 +310,71 @@
     {
       "id": "55A", "name": "Odometer", "ms": 1000, "from": "key-on",
       "try": "Compare with the dash odometer.",
-      "src": ["adv390"],
+      "src": ["adv390", "ktm1390"],
       "fields": [
-        { "name": "Odometer", "b": 0, "n": 3, "mul": 0.1, "dp": 1, "unit": "km", "min": 0, "max": 999999, "bikes": { "Adv390": "confirmed" }, "note": "21430 = 2,143 km on the dash" }
+        { "name": "Odometer", "b": 0, "n": 3, "mul": 0.1, "dp": 1, "unit": "km", "min": 0, "max": 999999, "bikes": { "Adv390": "confirmed", "1390": "capture" }, "note": "21430 = 2,143 km on the dash (390 Adventure). 1390 Evo: 00 17 16 = 591.0 km in sixteen logs and 00 17 83 = 601.9 km in a later one, so it counts up as the bike is ridden" }
       ]
     },
     {
       "id": "5A0", "name": "Slow status", "from": "key-on",
-      "src": ["ktmcomp", "adv390"], "bikes": { "690": "candidate", "Adv390": "candidate" },
+      "src": ["ktmcomp", "adv390", "ktm1390"], "bikes": { "690": "candidate", "Adv390": "candidate", "1390": "candidate" },
       "fields": [
-        { "b": 1, "text": "690: D1 and D2 change once after the ECU wakes. 390 Adventure: static with the engine off." }
+        { "b": 1, "text": "690: D1 and D2 change once after the ECU wakes. 390 Adventure: static with the engine off. 1390 Evo: D3-D6 sit at 62 44 92 80 and D7 is a counter." }
       ]
     },
     {
       "id": "5A2", "name": "Static with engine off (390 Adventure)", "from": "key-on",
-      "src": ["adv390"], "bikes": { "Adv390": "candidate" },
+      "src": ["adv390", "ktm1390"], "bikes": { "Adv390": "candidate", "1390": "candidate" },
       "fields": [ { "b": 0, "text": "capture again riding" } ]
     },
     {
       "id": "5B0", "name": "Static with engine off (390 Adventure)", "from": "key-on",
-      "src": ["adv390"], "bikes": { "Adv390": "candidate" },
+      "src": ["adv390", "ktm1390"], "bikes": { "Adv390": "candidate", "1390": "candidate" },
       "fields": [ { "b": 0, "text": "capture again riding" } ]
     },
     {
+      "id": "5B1", "name": "Counter only (1390 Evo)", "ms": 100, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 7, "text": "only D7 changes (a counter)" } ]
+    },
+    {
+      "id": "5B2", "name": "Static (1390 Evo)", "ms": 100, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "always 08 00 00 00 00 00 00 00" } ]
+    },
+    {
+      "id": "5CF", "name": "Not decoded (1390 Evo)", "ms": 100, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "D0-D5 change a little (six different frames in the whole set). Meaning not known." } ]
+    },
+    {
+      "id": "5D0", "name": "Not decoded (1390 Evo)", "ms": 100, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "D0 and D2 change (four different frames in the whole set). Meaning not known." } ]
+    },
+    {
+      "id": "5D1", "name": "Suspension mode (semi-active)", "ms": 20, "from": "?",
+      "try": "On a bike with electronic suspension, change the suspension profile and watch D0.",
+      "src": ["ktm1390"], "bikes": { "1390": "confirmed" },
+      "note": "Only bikes with electronic (semi-active) suspension: not a Gen 1 Duke.",
+      "fields": [
+        { "name": "Suspension profile", "b": 0, "map": { "0": "Automatic", "34": "Sport", "68": "Street", "102": "Comfort", "153": "Track", "170": "Pro", "187": "Rain" }, "bikes": { "1390": "confirmed" }, "note": "99 (Track), AA (Pro) and 00 (Automatic) were seen while switching profiles; the other values are from the repo README" },
+        { "b": 1, "text": "preload: 58 = auto standard in every log (the README also lists 60 auto low, 68 auto high, 50 = 100%, D8 = 95%, 48 = 90%, 08 = 10%, 90 = 5%, 00 = 0%)" }
+      ]
+    },
+    {
+      "id": "5D2", "name": "Not decoded (1390 Evo)", "ms": 100, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "D0-D5 change a little (six different frames in the whole set). Meaning not known." } ]
+    },
+    {
+      "id": "6AB", "name": "Rolling security value? (1390 Evo)", "ms": 1000, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "random-looking bytes with only two different frames in the whole set; probably a checksum or security value" } ]
+    },
+    {
       "id": "6B9", "name": "Static with engine off (390 Adventure)", "from": "key-on",
-      "src": ["adv390"], "bikes": { "Adv390": "candidate" },
+      "src": ["adv390", "ktm1390"], "bikes": { "Adv390": "candidate", "1390": "candidate" },
       "fields": [ { "b": 0, "text": "capture again riding" } ]
     },
     {
@@ -280,6 +382,11 @@
       "src": ["adv390"], "bikes": { "Adv390": "candidate" },
       "note": "D0 = 0F or 30 looks like multi-frame framing: probably the dash or a diagnostic transport, not live sensor data.",
       "fields": []
+    },
+    {
+      "id": "6E2", "name": "Static (1390 Evo)", "ms": 1000, "from": "?",
+      "src": ["ktm1390"], "bikes": { "1390": "candidate" },
+      "fields": [ { "b": 0, "text": "always 05 44 00 00 00 00 00 00" } ]
     },
     {
       "id": "7DF", "name": "OBD-II request to all modules", "ms": 0, "from": "scan tool or this unit",

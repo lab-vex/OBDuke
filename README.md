@@ -224,7 +224,7 @@ Everything is read-only except **Clear codes** and the **raw command**, which yo
 
 ## Finding wheel speeds (and other hidden values)
 
-The ECU only reports one speed (PID 0D). Front and rear wheel speeds come from the Bosch ABS unit, and KTM has never published its CAN IDs. People have captured them on other bikes though (690, 701, 890/790, 1290, 390 Adventure), and the sniffer carries a table of those layouts, so it can point at the likely ID for you. Nobody has published a capture from a Gen 1 390 Duke, so treat the table as a list of things to try and check each one on your bike. Details and sources: [docs/can-ids.md](docs/can-ids.md).
+The ECU only reports one speed (PID 0D). Front and rear wheel speeds come from the Bosch ABS unit, and KTM has never published its CAN IDs. People have captured them on other bikes though (690, 701, 890/790, 1290, 1390, 390 Adventure), and the sniffer carries a table of those layouts, so it can point at the likely ID for you. Nobody has published a capture from a Gen 1 390 Duke, so treat the table as a list of things to try and check each one on your bike. Details and sources: [docs/can-ids.md](docs/can-ids.md).
 
 1. Bike on a paddock stand, key on, engine off. Tools > **Bus sniffer > Start**.
 2. An ID with a name under it (e.g. *ABS wheel speeds and lean*) is one other KTMs use. Tap the name: you get the byte map, what to do to test it, and a live value for every field. A value marked with a cross is outside what's believable, so that layout probably isn't your bike's.
@@ -243,7 +243,7 @@ The new tile appears on the Dash, in the log CSV and to Torque as `22F001`-`22F0
 
 **The KTM ID table:**
 - It lives in one file, `android/app/src/main/assets/can_ids.json`: the app reads it directly, and `python3 tools/gen_can_ids.py` copies it into the web page (`firmware/obduke/web_ui.h`) and the tables in `docs/can-ids.md`. CI runs the generator with `--check`, so the three can't drift apart.
-- Every entry says which bike it was seen on and how sure that is: **confirmed** (the project's owner checked it against the dash or the bike), **capture** (found in a real capture but not cross-checked, so the unit or meaning may be a guess), **reported** (a forum post with no capture to check) or **candidate** (an educated guess from the byte pattern).
+- Every entry says which bike it was seen on and how sure that is: **confirmed** (checked against the dash or the bike's behaviour, by the project's owner or against a labelled capture log), **capture** (found in a real capture but not cross-checked, so the unit or meaning may be a guess), **reported** (a forum post with no capture to check) or **candidate** (an educated guess from the byte pattern).
 - Where the 690 and the 390 Adventure disagree about the same bytes (coolant, side stand), both are listed. Whichever gives a believable number is the one for your bike.
 - *Copy capture report* puts the whole capture (every ID, its bytes and which ones moved) on the clipboard. If you capture on your Gen 1, please post it: it's the missing piece.
 - Found a layout that's right (or wrong) on your bike? Edit `can_ids.json`, run the generator, and send it in.
