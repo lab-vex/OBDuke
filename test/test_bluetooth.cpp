@@ -9,7 +9,7 @@ int main() {
   setup(); spin(4000);
   std::string r = BT("!status");
   CHECK(r.rfind("{\"t\":\"status\"", 0) == 0 && r.size() > 10 && r.substr(r.size() - 2) == "\r\n", "!status -> one JSON line, no echo/prompt");
-  CHECK(has(r, "\"fw\":\"1.2.0\""), "fw 1.2.0");
+  CHECK(has(r, "\"fw\":\"1.2.1\""), "fw 1.2.1");
   r = BT("!status"); CHECK(has(r, "\"bt_mode\":\"app\""), "bt_mode app");
   r = BT("!live"); spin(600); r = BT("!live");
   CHECK(has(r, "\"t\":\"live\"") && has(r, "\"rpm\":1500"), "!live gives live data");

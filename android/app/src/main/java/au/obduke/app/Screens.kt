@@ -167,7 +167,7 @@ private data class Gauge(
 
 // Tiles under the tacho, most-used first. RPM and gear live in the tacho itself.
 private val GAUGES = listOf(
-    Gauge("tps", "Throttle", "%", 100.0, 0),
+    Gauge("tps", "Throttle position", "%", 100.0, 0),
     Gauge("spd", "Speed", "km/h", 180.0, 0, imperial = { it * 0.6214 }, impUnit = "mph"),
     Gauge("ect", "Coolant", "°C", 120.0, 0, imperial = { it * 1.8 + 32 }, impUnit = "°F"),
     Gauge("vbat", "Battery", "V", 15.0, 2),
@@ -180,6 +180,20 @@ private val GAUGES = listOf(
 )
 
 private const val TACHO_MAX = 12000.0
+
+/** rpm past the shift warning where the shift light goes from flashing white to flashing red */
+private const val SHIFT_RED_ABOVE = 250.0
+
+/** Flips on/off every [periodMs] while it's non-null; steady on when null. */
+@Composable
+private fun rememberBlink(periodMs: Long?): Boolean {
+    var on by remember { mutableStateOf(true) }
+    LaunchedEffect(periodMs) {
+        on = true
+        if (periodMs != null) while (true) { kotlinx.coroutines.delay(periodMs); on = !on }
+    }
+    return on
+}
 
 @Composable
 fun DashScreen(vm: ObdukeViewModel) {
@@ -205,10 +219,7 @@ fun DashScreen(vm: ObdukeViewModel) {
         ) {
             item(span = { GridItemSpan(3) }) {
                 val rpm = vm.live["rpm"]
-                TachoTile(
-                    rpm, vm.live["gear"], vm.live["spd"], vm.rpmWarn.value,
-                    rpm != null && rpm >= vm.rpmWarn.value, vm.peaks["rpm"]
-                )
+                TachoTile(rpm, vm.live["gear"], vm.live["spd"], vm.rpmWarn.value, vm.peaks["rpm"])
             }
             val all = GAUGES + vm.sigDefs.map { Gauge(it.key, it.name, it.unit, 0.0, 2) }
             items(all) { g ->
@@ -223,7 +234,9 @@ fun DashScreen(vm: ObdukeViewModel) {
                 val pct = if (g.max <= 0) 0.0 else raw?.let { ((if (g.absBar) abs(it) else it) / g.max).coerceIn(0.0, 1.0) } ?: 0.0
                 val pk = vm.peaks[g.key]?.let { p -> "max %.0f".format(if (imp && g.imperial != null) g.imperial.invoke(p) else p) }
                 val text = if (shown == null) "--" else "%.${g.dp}f".format(shown)
-                Tile(g.label, text, unit, pct.toFloat(), warn, raw == null, pk)
+                // overtemp / low battery pulse red, 500 ms on / 500 ms off
+                val on = rememberBlink(if (warn) 500L else null)
+                Tile(g.label, text, unit, pct.toFloat(), warn && on, raw == null, pk)
             }
             item(span = { GridItemSpan(3) }) {
                 Row { KButton("Reset peaks", { vm.send("peak reset") }) }
@@ -234,15 +247,25 @@ fun DashScreen(vm: ObdukeViewModel) {
 
 /** Tacho like the one on the app icon: 0-12k arc, red from the shift warning, gear in the middle. */
 @Composable
-private fun TachoTile(rpm: Double?, gear: Double?, spd: Double?, warnAt: Double, warn: Boolean, peak: Double?) {
+private fun TachoTile(rpm: Double?, gear: Double?, spd: Double?, warnAt: Double, peak: Double?) {
     val frac = ((rpm ?: 0.0) / TACHO_MAX).toFloat().coerceIn(0f, 1f)
     val redFrac = (warnAt / TACHO_MAX).toFloat().coerceIn(0f, 1f)
+    // Shift light: flashing white from the warning, flashing red from SHIFT_RED_ABOVE past it
+    val stage = when {
+        rpm == null || rpm < warnAt -> 0
+        rpm < warnAt + SHIFT_RED_ABOVE -> 1
+        else -> 2
+    }
+    val on = rememberBlink(when (stage) { 1 -> 350L; 2 -> 250L; else -> null })
+    val lit = if (stage == 2) C.Bad else Color.White
+    val warn = stage > 0
+    val arcColor = when { !warn -> C.Orange; on -> lit; else -> Color(0xFF4A4A4A) }
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(C.Card)
-            .border(1.dp, if (warn) C.Bad else C.Line, RoundedCornerShape(14.dp))
+            .border(if (warn && on) 2.dp else 1.dp, if (warn && on) lit else C.Line, RoundedCornerShape(14.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -256,7 +279,7 @@ private fun TachoTile(rpm: Double?, gear: Double?, spd: Double?, warnAt: Double,
                 val sweep = 270f
                 drawArc(C.Track, start, sweep, false, tl, arc, style = Stroke(sw))
                 drawArc(C.Bad.copy(alpha = 0.35f), start + sweep * redFrac, sweep * (1 - redFrac), false, tl, arc, style = Stroke(sw))
-                if (frac > 0f) drawArc(if (warn) C.Bad else C.Orange, start, sweep * frac, false, tl, arc, style = Stroke(sw, cap = StrokeCap.Round))
+                if (frac > 0f) drawArc(arcColor, start, sweep * frac, false, tl, arc, style = Stroke(sw, cap = StrokeCap.Round))
                 // a tick every 1000 rpm, longer every 2000
                 val r1 = arc.width / 2 - sw / 2 - 3.dp.toPx()
                 for (i in 0..12) {
@@ -292,10 +315,10 @@ private fun TachoTile(rpm: Double?, gear: Double?, spd: Double?, warnAt: Double,
             Text(
                 rpm?.let { "%.0f".format(it) } ?: "--", fontSize = 40.sp, fontWeight = FontWeight.ExtraBold,
                 fontStyle = FontStyle.Italic,
-                color = when { rpm == null -> Color(0xFF555555); warn -> C.Bad; else -> C.Text }
+                color = when { rpm == null -> Color(0xFF555555); !warn -> C.Text; on -> lit; else -> Color(0xFF4A4A4A) }
             )
             Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.Track)) {
-                Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(if (warn) androidx.compose.ui.graphics.SolidColor(C.Bad) else C.Glow))
+                Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(if (warn) androidx.compose.ui.graphics.SolidColor(arcColor) else C.Glow))
             }
             if (peak != null) Text(
                 "max %.0f".format(peak), color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
@@ -315,7 +338,10 @@ private fun Tile(label: String, value: String, unit: String, pct: Float, warn: B
             .border(1.dp, if (warn) C.Bad else C.Line, RoundedCornerShape(10.dp))
     ) {
         Column(Modifier.padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 10.dp)) {
-            Text(label.uppercase(), color = C.Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(
+                label.uppercase(), color = C.Muted, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false,
+                fontSize = if (label.length > 12) 9.sp else 10.sp, letterSpacing = if (label.length > 12) 0.sp else 0.5.sp
+            )
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     value, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
@@ -535,7 +561,7 @@ fun ToolsScreen(vm: ObdukeViewModel) {
             Spacer(Modifier.width(8.dp))
             KButton("Send", { vm.send("raw $raw", "Sending") }, enabled = rawAllowed && raw.isNotBlank())
         }
-        if (!rawAllowed) Text("Turn on \"Allow raw ECU commands\" in Settings.", color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+        if (!rawAllowed) Text("Turn on \"Allow raw ECU commands\" in Settings → Show advanced → CAN / ECU.", color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
         Heading("Output")
         Text(
             vm.toolOut.value, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color(0xFFDDDDDD),
@@ -675,7 +701,7 @@ fun SettingsScreen(vm: ObdukeViewModel) {
             KButton(if (showAdv) "Hide advanced" else "Show advanced", { showAdv = !showAdv }, modifier = Modifier.fillMaxWidth())
             if (showAdv) {
                 Text(
-                    "Home Wi-Fi, hotspot extras, Bluetooth on/off, custom signals and wiring. Most people never need these.",
+                    "Home Wi-Fi, hotspot extras, Bluetooth on/off, CAN / ECU, gear ratios, log interval, custom signals and wiring. Most people never need these.",
                     color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
                 )
                 ADVANCED.forEach { (title, keys) ->
@@ -766,8 +792,11 @@ private val ADVANCED = listOf(
     "Home Wi-Fi" to listOf("wifi_mode", "sta_ssid", "sta_pass", "hostname"),
     "Hotspot extras" to listOf("ap_ch", "ap_hidden", "captive"),
     "Bluetooth" to listOf("trk_on"),
+    "CAN / ECU" to listOf("can_rate", "allow_raw", "rpm_div", "can_tx", "can_rx"),
+    "Gear indicator" to listOf("gears"),
+    "Logging" to listOf("log_ms"),
     "Custom signals" to listOf("sig1", "sig2", "sig3", "sig4"),
-    "Hardware" to listOf("can_tx", "can_rx", "rpm_div", "vbat_pin", "vbat_mult", "led_pin"),
+    "Hardware" to listOf("vbat_pin", "vbat_mult", "led_pin"),
 )
 
 @Composable

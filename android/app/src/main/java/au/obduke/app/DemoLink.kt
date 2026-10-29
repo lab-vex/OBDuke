@@ -188,7 +188,7 @@ class DemoLink : ObdLink {
                 for ((id, d) in busFrames(now())) ids.put(JSONObject().put("id", id).put("n", 300).put("data", d.joinToString(" ") { hex(it) }).put("chg", id != "540"))
                 JSONObject().put("t", "monitor").put("ok", true).put("ids", ids)
             }
-            "raw" -> if (settings["allow_raw"] != "1") err("raw", "Raw commands are off. Turn on Allow raw ECU commands in Settings.")
+            "raw" -> if (settings["allow_raw"] != "1") err("raw", "Raw commands are off. Turn on Allow raw ECU commands in Settings > Show advanced > CAN / ECU.")
             else if (a.isEmpty()) err("raw", "Give hex bytes, e.g. raw 22 F1 90")
             else {
                 val req = a.uppercase().split(" ").filter { it.isNotEmpty() }
@@ -251,7 +251,7 @@ class DemoLink : ObdLink {
             val f = settings["sig$i"]!!.split(":")
             sigs.put(JSONObject().put("k", "c$i").put("n", f.getOrElse(6) { "Signal $i" }).put("u", f.getOrElse(7) { "" }))
         }
-        return JSONObject().put("t", "status").put("ok", true).put("fw", "1.2.0 (demo)")
+        return JSONObject().put("t", "status").put("ok", true).put("fw", "1.2.1 (demo)")
             .put("ecu", true).put("ecu_id", "7E8").put("can", "500k").put("ktm_rpm", true)
             .put("fi", if (stored.isEmpty()) 0 else 1).put("dtc", stored.size)
             .put("uptime", (now() + 600).toLong()).put("heap", 143360).put("tracker", false)
@@ -400,7 +400,7 @@ class DemoLink : ObdLink {
     }
 
     // ---------------- logging ----------------
-    private fun logMs() = (settings["log_ms"]?.toIntOrNull() ?: 1000).coerceAtLeast(200)
+    private fun logMs() = (settings["log_ms"]?.toIntOrNull() ?: 300).coerceAtLeast(200)
 
     private fun logCount(): Int =
         if (!logOn) logFrozenN else min(LOG_MAX, ((System.currentTimeMillis() - logStart) / logMs()).toInt() + 1)
@@ -459,7 +459,7 @@ class DemoLink : ObdLink {
     )
 
     companion object {
-        private const val LOG_MAX = 600
+        private const val LOG_MAX = 1500
 
         private fun hex(b: Int) = "%02X".format(b and 0xFF)
 
@@ -491,7 +491,7 @@ class DemoLink : ObdLink {
             Def("sta_ssid", "Home Wi-Fi name", "Wi-Fi", "str", "", true, "", 0.0, 32.0),
             Def("sta_pass", "Home Wi-Fi password", "Wi-Fi", "pass", "", true, "", 0.0, 63.0),
             Def("hostname", "Network name (.local)", "Wi-Fi", "str", "obduke", true, "", 1.0, 24.0),
-            Def("web_user", "Web login user", "Web page", "str", "admin", false, "", 1.0, 24.0),
+            Def("web_user", "Web login user (blank = no login)", "Web page", "str", "admin", false, "", 0.0, 24.0),
             Def("web_pass", "Web login password (blank = no login)", "Web page", "pass", "", false, "", 0.0, 32.0),
             Def("captive", "Open page automatically on join", "Web page", "bool", "1", true, "", 0.0, 1.0),
             Def("bt_name", "Bluetooth name (Torque / tracker see this)", "Bluetooth ELM327", "str", "OBDuke", true, "", 1.0, 24.0),
@@ -515,7 +515,7 @@ class DemoLink : ObdLink {
             Def("vbat_pin", "Battery sense pin (0 = off, use 32-39)", "Battery", "int", "0", true, "", 0.0, 39.0),
             Def("vbat_mult", "Battery divider ratio", "Battery", "float", "5.7", false, "", 1.0, 20.0),
             Def("vbat_low", "Low battery warning (V)", "Battery", "float", "11.8", false, "", 9.0, 14.0),
-            Def("log_ms", "Log interval (ms)", "Logging", "int", "1000", false, "", 200.0, 60000.0),
+            Def("log_ms", "Log interval (ms)", "Logging", "int", "300", false, "", 200.0, 60000.0),
             Def("log_auto", "Start logging on power-up", "Logging", "bool", "0", false, "", 0.0, 1.0),
             Def("led_pin", "Status LED pin (0 = off)", "System", "int", "2", true, "", 0.0, 33.0),
         )

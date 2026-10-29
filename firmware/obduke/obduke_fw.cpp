@@ -35,7 +35,7 @@
 #include "esp_bt.h"
 #include "web_ui.h"
 
-#define FW_VERSION "1.2.0"
+#define FW_VERSION "1.2.1"
 #define OBD_FUNC_ID 0x7DF
 
 
@@ -79,7 +79,7 @@ static const SDef SDEFS[K_COUNT] = {
   {"sta_pass",  "Home Wi-Fi password", "Wi-Fi", S_PASS, "", true, "", 0, 63},
   {"hostname",  "Network name (.local)", "Wi-Fi", S_STR, "obduke", true, "", 1, 24},
 
-  {"web_user",  "Web login user", "Web page", S_STR, "admin", false, "", 1, 24},
+  {"web_user",  "Web login user (blank = no login)", "Web page", S_STR, "admin", false, "", 0, 24},
   {"web_pass",  "Web login password (blank = no login)", "Web page", S_PASS, "", false, "", 0, 32},
   {"captive",   "Open page automatically on join", "Web page", S_BOOL, "1", true, "", 0, 1},
 
@@ -113,7 +113,7 @@ static const SDef SDEFS[K_COUNT] = {
   {"vbat_mult", "Battery divider ratio", "Battery", S_FLOAT, "5.7", false, "", 1, 20},
   {"vbat_low",  "Low battery warning (V)", "Battery", S_FLOAT, "11.8", false, "", 9, 14},
 
-  {"log_ms",    "Log interval (ms)", "Logging", S_INT, "1000", false, "", 200, 60000},
+  {"log_ms",    "Log interval (ms)", "Logging", S_INT, "300", false, "", 200, 60000},
   {"log_auto",  "Start logging on power-up", "Logging", S_BOOL, "0", false, "", 0, 1},
   {"led_pin",   "Status LED pin (0 = off)", "System", S_INT, "2", true, "", 0, 33},
 };
@@ -618,12 +618,23 @@ static int calcGear(float rpm, float spd) {
   return bestErr < 0.12f ? best : 0;   // > 12% off any gear = clutch in / slipping
 }
 
-#define LOG_N 600   // ~24 KB, only allocated when logging starts
+// Log buffer, allocated when logging starts: up to LOG_BIG samples (~60 KB) if that still leaves
+// LOG_SPARE bytes for Wi-Fi / Bluetooth, else LOG_N (~24 KB).
+#define LOG_N 600
+#define LOG_BIG 1500
+#define LOG_SPARE 60000
 struct LogRec { uint32_t ms; int16_t v[L_N]; uint32_t ok; };
 static LogRec *logBuf = nullptr;
+static int logMax = LOG_N;
 static bool logAlloc() {
-  if (!logBuf) logBuf = (LogRec *)calloc(LOG_N, sizeof(LogRec));
-  return logBuf != nullptr;
+  if (logBuf) return true;
+  const int sizes[] = {LOG_BIG, LOG_N};
+  for (int n : sizes) {
+    if (ESP.getFreeHeap() < (size_t)n * sizeof(LogRec) + LOG_SPARE && n != LOG_N) continue;
+    logBuf = (LogRec *)calloc(n, sizeof(LogRec));
+    if (logBuf) { logMax = n; return true; }
+  }
+  return false;
 }
 static int logHead = 0, logCount = 0;
 static bool logging = false;
@@ -733,8 +744,8 @@ static void logSample() {
     if (s < -32768) s = -32768;
     r.v[i] = (int16_t)s;
   }
-  logHead = (logHead + 1) % LOG_N;
-  if (logCount < LOG_N) logCount++;
+  logHead = (logHead + 1) % logMax;
+  if (logCount < logMax) logCount++;
 }
 
 static String logHeader() {
@@ -760,7 +771,7 @@ static String logRow(int idx) {
   return s;
 }
 
-static int logIndex(int n) { return (logHead - logCount + n + LOG_N) % LOG_N; }
+static int logIndex(int n) { return (logHead - logCount + n + logMax) % logMax; }
 
 // =====================================================================
 //  ECU connection
@@ -1331,7 +1342,7 @@ static String cmdStatus(Chan ch) {
   o += ",\"wifi_clients\":" + String(WiFi.softAPgetStationNum());
   o += ",\"ap_ip\":\"" + WiFi.softAPIP().toString() + "\"";
   o += ",\"sta_ip\":\"" + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : String("")) + "\"";
-  o += ",\"log\":" + String(logging ? "true" : "false") + ",\"log_n\":" + String(logCount) + ",\"log_max\":" + String(LOG_N);
+  o += ",\"log\":" + String(logging ? "true" : "false") + ",\"log_n\":" + String(logCount) + ",\"log_max\":" + String(logMax);
   o += ",\"units\":" + String(sInt(K_UNITS)) + ",\"live_ms\":" + String(sInt(K_LIVE_MS));
   o += ",\"temp_warn\":" + String(sInt(K_TEMP_WARN)) + ",\"rpm_warn\":" + String(sInt(K_RPM_WARN));
   o += ",\"vbat_low\":" + fmtF(sFlt(K_VBAT_LOW), 1);
@@ -1469,7 +1480,7 @@ static String cmdLog(const String &arg) {
     logHead = 0; logCount = 0;
   }
   return "{\"t\":\"log\",\"ok\":true,\"on\":" + String(logging ? "true" : "false") + ",\"n\":" + String(logCount) +
-         ",\"max\":" + String(LOG_N) + ",\"ms\":" + String(sInt(K_LOG_MS)) + "}";
+         ",\"max\":" + String(logMax) + ",\"ms\":" + String(sInt(K_LOG_MS)) + "}";
 }
 
 
@@ -1782,7 +1793,8 @@ static void trackerTask() {
 //  Web server
 // =====================================================================
 static bool webAuth() {
-  if (!sStr(K_WEB_PASS).length()) return true;
+  // no login unless both a user and a password are set
+  if (!sStr(K_WEB_USER).length() || !sStr(K_WEB_PASS).length()) return true;
   if (web.authenticate(sStr(K_WEB_USER).c_str(), sStr(K_WEB_PASS).c_str())) return true;
   web.requestAuthentication(BASIC_AUTH, "OBDuke");
   return false;
