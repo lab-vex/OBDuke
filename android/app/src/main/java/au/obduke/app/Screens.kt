@@ -636,6 +636,22 @@ fun SettingsScreen(vm: ObdukeViewModel) {
     val edits = remember { mutableStateMapOf<String, String>() }
     var askReboot by remember { mutableStateOf(false) }
     var askFactory by remember { mutableStateOf(false) }
+    var showAdv by remember { mutableStateOf(false) }
+    var askBtOff by remember { mutableStateOf(false) }
+
+    // The unit's settings, regrouped for the app: everyday ones up top, the rest under Advanced.
+    val tidy = vm.fields.map { f ->
+        f.copy(
+            group = SETTING_GROUP[f.group] ?: f.group,
+            label = SETTING_LABEL[f.key] ?: f.label
+        )
+    }
+    val advKeys = ADVANCED.flatMap { it.second }.toSet()
+    fun onEditFor(f: Field): (String) -> Unit = { v ->
+        // switching Bluetooth off cuts the app (and Torque) off, so make sure first
+        if (f.key == "trk_on" && v == "0" && (edits[f.key] ?: f.value) == "1") askBtOff = true
+        else edits[f.key] = v
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Heading("App", Modifier.padding(top = 0.dp))
@@ -649,12 +665,28 @@ fun SettingsScreen(vm: ObdukeViewModel) {
         }
         UpdatesCard(vm)
 
-        var group = ""
-        vm.fields.forEach { f ->
-            if (f.group != group) { group = f.group; Heading(group) }
-            SettingField(f, edits[f.key]) { edits[f.key] = it }
+        tidy.filter { it.key !in advKeys }.groupBy { it.group }.forEach { (group, list) ->
+            Heading(group)
+            list.forEach { SettingField(it, edits[it.key], onEditFor(it)) }
         }
         if (vm.fields.isEmpty()) Text("Loading settings…", color = C.Muted, modifier = Modifier.padding(top = 12.dp))
+        else {
+            Spacer(Modifier.height(10.dp))
+            KButton(if (showAdv) "Hide advanced" else "Show advanced", { showAdv = !showAdv }, modifier = Modifier.fillMaxWidth())
+            if (showAdv) {
+                Text(
+                    "Home Wi-Fi, hotspot extras, Bluetooth on/off, custom signals and wiring. Most people never need these.",
+                    color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)
+                )
+                ADVANCED.forEach { (title, keys) ->
+                    val list = keys.mapNotNull { k -> tidy.firstOrNull { it.key == k } }
+                    if (list.isNotEmpty()) {
+                        Heading(title)
+                        list.forEach { SettingField(it, edits[it.key], onEditFor(it)) }
+                    }
+                }
+            }
+        }
         Text("↻ = takes effect after reboot", color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
 
         Spacer(Modifier.height(14.dp))
@@ -702,6 +734,19 @@ fun SettingsScreen(vm: ObdukeViewModel) {
         confirmButton = { TextButton({ askReboot = false; vm.send("reboot") }) { Text("REBOOT", color = C.Orange, fontWeight = FontWeight.ExtraBold) } },
         dismissButton = { TextButton({ askReboot = false }) { Text("LATER", color = C.Muted) } }
     )
+    if (askBtOff) AlertDialog(
+        onDismissRequest = { askBtOff = false }, containerColor = C.Card,
+        title = { Text("Turn Bluetooth off?", fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Text(
+                "This switches the unit's Bluetooth off completely. The OBDuke app, Torque Pro and the tracker won't be able to connect over Bluetooth." +
+                    (if (vm.transport.value == "bt" && !vm.demo.value) " You're connected over Bluetooth now, so the app will lose its connection when you save." else "") +
+                    "\n\nTo turn it back on, join the OBDuke Wi-Fi and open the web page at ${vm.status.value.optString("ap_ip", "1.1.1.1")} (or use this app over Wi-Fi), then switch it on in Settings and reboot."
+            )
+        },
+        confirmButton = { TextButton({ askBtOff = false; edits["trk_on"] = "0" }) { Text("TURN OFF", color = C.Bad, fontWeight = FontWeight.ExtraBold) } },
+        dismissButton = { TextButton({ askBtOff = false }) { Text("CANCEL", color = C.Muted) } }
+    )
     if (askFactory) AlertDialog(
         onDismissRequest = { askFactory = false }, containerColor = C.Card,
         title = { Text("Factory reset?", fontWeight = FontWeight.ExtraBold) },
@@ -710,6 +755,20 @@ fun SettingsScreen(vm: ObdukeViewModel) {
         dismissButton = { TextButton({ askFactory = false }) { Text("CANCEL", color = C.Muted) } }
     )
 }
+
+/** The firmware's groups, renamed for the app. */
+private val SETTING_GROUP = mapOf("Web page" to "Wi-Fi", "Bluetooth ELM327" to "Bluetooth")
+
+private val SETTING_LABEL = mapOf("trk_on" to "Bluetooth (OBDuke app, Torque Pro, tracker)")
+
+/** Settings shown only under Show advanced, by section. Anything not listed stays in the main list. */
+private val ADVANCED = listOf(
+    "Home Wi-Fi" to listOf("wifi_mode", "sta_ssid", "sta_pass", "hostname"),
+    "Hotspot extras" to listOf("ap_ch", "ap_hidden", "captive"),
+    "Bluetooth" to listOf("trk_on"),
+    "Custom signals" to listOf("sig1", "sig2", "sig3", "sig4"),
+    "Hardware" to listOf("can_tx", "can_rx", "rpm_div", "vbat_pin", "vbat_mult", "led_pin"),
+)
 
 @Composable
 private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {

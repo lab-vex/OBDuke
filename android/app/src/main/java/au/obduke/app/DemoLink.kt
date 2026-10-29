@@ -88,9 +88,10 @@ class DemoLink : ObdLink {
             p < 24 -> {                                    // 3 s in each gear
                 val gi = ((p - 6) / 3).toInt().coerceIn(0, 5)
                 val f = ((p - 6) % 3) / 3
-                // shift at 9200 rpm; the revs drop by the ratio change. 6th eases off into the cruise.
-                val top = if (gi < 5) 9200.0 else 6700.0
-                val bottom = if (gi == 0) 3500.0 else 9200.0 * g[gi] / g[gi - 1]
+                // shift at 9800 rpm (past the 9500 warning, so it shows red); the revs drop by the
+                // ratio change. 6th eases off into the cruise.
+                val top = if (gi < 5) 9800.0 else 6700.0
+                val bottom = if (gi == 0) 3500.0 else 9800.0 * g[gi] / g[gi - 1]
                 rpm = bottom + (top - bottom) * f
                 spd = rpm / g[gi]
                 tps = if (gi < 5) 92 + 8 * f else 35.0
