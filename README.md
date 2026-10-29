@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.png" width="160" alt="OBDuke icon"></p>
+
 # OBDuke
 
 DIY diagnostic tool for the Gen 1 KTM 390 Duke (2013–2016), built on an ESP32-WROOM-32E with an SN65HVD230 CAN transceiver.

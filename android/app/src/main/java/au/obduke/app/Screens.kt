@@ -28,7 +28,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 // =====================================================================
 //  Connect screen
@@ -41,6 +51,11 @@ fun ConnectScreen(vm: ObdukeViewModel, onAskBt: () -> Unit, onBtSettings: () -> 
     LaunchedEffect(vm.transport.value, vm.btAllowed.value) { if (useBt) vm.refreshBtDevices() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Image(
+            painterResource(R.drawable.obduke_icon), contentDescription = "OBDuke",
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 16.dp)
+                .size(132.dp).clip(RoundedCornerShape(28.dp))
+        )
         CardBox {
             Text(
                 if (st == LinkState.CONNECTING) "Connecting…" else "Not connected",
@@ -150,20 +165,21 @@ private data class Gauge(
     val imperial: ((Double) -> Double)? = null, val impUnit: String = ""
 )
 
+// Tiles under the tacho, most-used first. RPM and gear live in the tacho itself.
 private val GAUGES = listOf(
-    Gauge("rpm", "RPM", "", 15000.0, 0, big = true),
-    Gauge("tps", "Throttle", "%", 100.0, 1),
+    Gauge("tps", "Throttle", "%", 100.0, 0),
     Gauge("spd", "Speed", "km/h", 180.0, 0, imperial = { it * 0.6214 }, impUnit = "mph"),
     Gauge("ect", "Coolant", "°C", 120.0, 0, imperial = { it * 1.8 + 32 }, impUnit = "°F"),
-    Gauge("iat", "Intake air", "°C", 80.0, 0, imperial = { it * 1.8 + 32 }, impUnit = "°F"),
+    Gauge("vbat", "Battery", "V", 15.0, 2),
+    Gauge("iat", "Intake", "°C", 80.0, 0, imperial = { it * 1.8 + 32 }, impUnit = "°F"),
     Gauge("map", "MAP", "kPa", 110.0, 0),
-    Gauge("adv", "Ign advance", "°", 50.0, 1),
+    Gauge("adv", "Advance", "°", 50.0, 1),
     Gauge("stft", "Short trim", "%", 25.0, 1, absBar = true),
     Gauge("ltft", "Long trim", "%", 25.0, 1, absBar = true),
-    Gauge("o2", "O2 sensor", "V", 1.0, 2),
-    Gauge("vbat", "Battery", "V", 15.0, 2),
-    Gauge("gear", "Gear", "", 6.0, 0),
+    Gauge("o2", "O2", "V", 1.0, 2),
 )
+
+private const val TACHO_MAX = 12000.0
 
 @Composable
 fun DashScreen(vm: ObdukeViewModel) {
@@ -172,27 +188,33 @@ fun DashScreen(vm: ObdukeViewModel) {
         onDispose { vm.stopLive() }
     }
     val imp = vm.units.value == 1
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         if (vm.fi.value == 1) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             CardBox(borderColor = C.Warn) {
-                Text("FI LIGHT IS ON — ${vm.dtcCount.value} code(s). See Codes.", color = C.Warn, fontWeight = FontWeight.ExtraBold)
+                Text("FI LIGHT IS ON — ${vm.dtcCount.value} code(s). See Codes.", color = C.Warn, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
             }
         } else if (!vm.ecu.value) {
-            Text("Waiting for ECU — turn the key on.", color = C.Muted, modifier = Modifier.padding(top = 12.dp))
+            Text("Waiting for ECU — turn the key on.", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
         }
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(vertical = 12.dp)
+            columns = GridCells.Fixed(3),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 10.dp)
         ) {
+            item(span = { GridItemSpan(3) }) {
+                val rpm = vm.live["rpm"]
+                TachoTile(
+                    rpm, vm.live["gear"], vm.live["spd"], vm.rpmWarn.value,
+                    rpm != null && rpm >= vm.rpmWarn.value, vm.peaks["rpm"]
+                )
+            }
             val all = GAUGES + vm.sigDefs.map { Gauge(it.key, it.name, it.unit, 0.0, 2) }
-            items(all, span = { GridItemSpan(if (it.big) 2 else 1) }) { g ->
+            items(all) { g ->
                 val raw = vm.live[g.key]
                 val warn = raw != null && when (g.key) {
                     "ect" -> raw >= vm.tempWarn.value
-                    "rpm" -> raw >= vm.rpmWarn.value
                     "vbat" -> raw < vm.vbatLow.value
                     else -> false
                 }
@@ -200,91 +222,112 @@ fun DashScreen(vm: ObdukeViewModel) {
                 val unit = if (imp && g.imperial != null) g.impUnit else g.unit
                 val pct = if (g.max <= 0) 0.0 else raw?.let { ((if (g.absBar) abs(it) else it) / g.max).coerceIn(0.0, 1.0) } ?: 0.0
                 val pk = vm.peaks[g.key]?.let { p -> "max %.0f".format(if (imp && g.imperial != null) g.imperial.invoke(p) else p) }
-                val text = when {
-                    shown == null -> "--"
-                    g.key == "gear" -> if (shown < 0.5) "–" else "%.0f".format(shown)
-                    else -> "%.${g.dp}f".format(shown)
-                }
-                if (g.key == "rpm") RpmTile(shown, pct.toFloat(), warn, pk)
-                else Tile(g.label, text, unit, pct.toFloat(), warn, g.big, raw == null, pk)
+                val text = if (shown == null) "--" else "%.${g.dp}f".format(shown)
+                Tile(g.label, text, unit, pct.toFloat(), warn, raw == null, pk)
             }
-            item(span = { GridItemSpan(2) }) {
+            item(span = { GridItemSpan(3) }) {
                 Row { KButton("Reset peaks", { vm.send("peak reset") }) }
             }
         }
     }
 }
 
-/** RPM tile with a 0-15 (x1000) scale under a horizontal bar. Red from 10k. */
+/** Tacho like the one on the app icon: 0-12k arc, red from the shift warning, gear in the middle. */
 @Composable
-private fun RpmTile(rpm: Double?, pct: Float, warn: Boolean, peak: String? = null) {
-    Column(
+private fun TachoTile(rpm: Double?, gear: Double?, spd: Double?, warnAt: Double, warn: Boolean, peak: Double?) {
+    val frac = ((rpm ?: 0.0) / TACHO_MAX).toFloat().coerceIn(0f, 1f)
+    val redFrac = (warnAt / TACHO_MAX).toFloat().coerceIn(0f, 1f)
+    Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(C.Card)
-            .border(1.dp, if (warn) C.Bad else C.Line, RoundedCornerShape(12.dp))
-            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)
+            .border(1.dp, if (warn) C.Bad else C.Line, RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("RPM", color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Row(verticalAlignment = Alignment.Bottom) {
+        Box(Modifier.size(128.dp), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.fillMaxSize()) {
+                val sw = 9.dp.toPx()
+                val inset = sw / 2 + 1.dp.toPx()
+                val arc = Size(size.width - 2 * inset, size.height - 2 * inset)
+                val tl = Offset(inset, inset)
+                val start = 135f
+                val sweep = 270f
+                drawArc(C.Track, start, sweep, false, tl, arc, style = Stroke(sw))
+                drawArc(C.Bad.copy(alpha = 0.35f), start + sweep * redFrac, sweep * (1 - redFrac), false, tl, arc, style = Stroke(sw))
+                if (frac > 0f) drawArc(if (warn) C.Bad else C.Orange, start, sweep * frac, false, tl, arc, style = Stroke(sw, cap = StrokeCap.Round))
+                // a tick every 1000 rpm, longer every 2000
+                val r1 = arc.width / 2 - sw / 2 - 3.dp.toPx()
+                for (i in 0..12) {
+                    val a = Math.toRadians((start + sweep * i / 12f).toDouble())
+                    val r2 = r1 - (if (i % 2 == 0) 8.dp else 4.dp).toPx()
+                    val red = i * 1000.0 >= warnAt
+                    drawLine(
+                        if (red) C.Bad else Color(0xFFBDBDBD),
+                        Offset(center.x + r1 * cos(a).toFloat(), center.y + r1 * sin(a).toFloat()),
+                        Offset(center.x + r2 * cos(a).toFloat(), center.y + r2 * sin(a).toFloat()),
+                        strokeWidth = 2.dp.toPx()
+                    )
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val g = gear
+                Text(
+                    when {
+                        g == null -> "--"
+                        g >= 0.5 -> "%.0f".format(g)
+                        (spd ?: 0.0) < 8 -> "N"
+                        else -> "–"
+                    },
+                    fontSize = 44.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic,
+                    color = if (g == null) Color(0xFF555555) else C.Orange
+                )
+                Text("GEAR", color = C.Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("RPM", color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(
-                rpm?.let { "%.0f".format(it) } ?: "--", fontSize = 44.sp, fontWeight = FontWeight.ExtraBold,
+                rpm?.let { "%.0f".format(it) } ?: "--", fontSize = 40.sp, fontWeight = FontWeight.ExtraBold,
+                fontStyle = FontStyle.Italic,
                 color = when { rpm == null -> Color(0xFF555555); warn -> C.Bad; else -> C.Text }
             )
-            Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.End) {
-                if (peak != null) Text(peak, color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text("×1000 rpm", color = C.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 6.dp))
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.Track)) {
+                Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(if (warn) androidx.compose.ui.graphics.SolidColor(C.Bad) else C.Glow))
             }
-        }
-        // scale labels + ticks
-        BoxWithConstraints(Modifier.fillMaxWidth().height(26.dp).padding(horizontal = 4.dp)) {
-            val w = maxWidth
-            for (i in 0..15) {
-                val x = w * (i / 15f)
-                val red = i >= 10
-                Text(
-                    "$i", fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                    color = if (red) C.Bad else C.Muted,
-                    modifier = Modifier.offset(x = x - 6.dp, y = 0.dp).width(12.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                Box(
-                    Modifier.offset(x = x, y = 17.dp).width(1.dp).height(8.dp)
-                        .background(if (red) C.Bad else Color(0xFF555555))
-                )
-            }
-        }
-        Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF262626))) {
-            Box(Modifier.fillMaxWidth(pct).fillMaxHeight().background(if (warn) C.Bad else C.Orange))
+            if (peak != null) Text(
+                "max %.0f".format(peak), color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 6.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun Tile(label: String, value: String, unit: String, pct: Float, warn: Boolean, big: Boolean, na: Boolean, peak: String? = null) {
-    val accent = if (warn) C.Bad else C.Orange
+private fun Tile(label: String, value: String, unit: String, pct: Float, warn: Boolean, na: Boolean, peak: String? = null) {
     Box(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(C.Card)
-            .border(1.dp, if (warn) C.Bad else C.Line, RoundedCornerShape(12.dp))
+            .border(1.dp, if (warn) C.Bad else C.Line, RoundedCornerShape(10.dp))
     ) {
-        Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 16.dp)) {
-            Text(label.uppercase(), color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 10.dp)) {
+            Text(label.uppercase(), color = C.Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    value, fontSize = if (big) 44.sp else 30.sp, fontWeight = FontWeight.ExtraBold,
+                    value, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
                     color = when { na -> Color(0xFF555555); warn -> C.Bad; else -> C.Text }
                 )
-                Text(" $unit", color = C.Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
+                Text(" $unit", color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.padding(bottom = 3.dp))
             }
-            if (peak != null) Text(peak, color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(peak ?: " ", color = C.Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
         Box(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth(pct).height(4.dp).background(accent)
+            Modifier.align(Alignment.BottomStart).fillMaxWidth(pct).height(3.dp)
+                .background(if (warn) androidx.compose.ui.graphics.SolidColor(C.Bad) else C.Glow)
         )
     }
 }

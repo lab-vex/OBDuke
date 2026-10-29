@@ -33,6 +33,10 @@ object C {
     val Bad = Color(0xFFFF3B30)
     val Ok = Color(0xFF30D158)
     val Warn = Color(0xFFFFCC00)
+    val Track = Color(0xFF262626)
+
+    /** Orange to red-orange, like the tacho arc in the app icon. */
+    val Glow = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFFFF8A00), Orange, Color(0xFFE8380A)))
 }
 
 private val scheme = darkColorScheme(
@@ -77,20 +81,26 @@ fun CardBox(modifier: Modifier = Modifier, borderColor: Color = C.Line, content:
 @Composable
 fun Logo() {
     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(width = 12.dp, height = 26.dp)
-                .rotate(20f)
-                .background(C.Orange)
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(R.drawable.obduke_icon), contentDescription = null,
+            modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
+        Wordmark(26)
+    }
+}
+
+/** "OBDuke" in heavy italic: OBD white, uke orange, as on the app icon. */
+@Composable
+fun Wordmark(size: Int) {
+    Row {
         Text(
-            "OB", color = C.Text, fontSize = 24.sp,
-            fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, letterSpacing = 1.sp
+            "OBD", color = C.Text, fontSize = size.sp,
+            fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, letterSpacing = 0.5.sp
         )
         Text(
-            "DUKE", color = C.Orange, fontSize = 24.sp,
-            fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, letterSpacing = 1.sp
+            "uke", color = C.Orange, fontSize = size.sp,
+            fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, letterSpacing = 0.5.sp
         )
     }
 }

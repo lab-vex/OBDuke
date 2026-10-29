@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.weight(1f))
                         StatusPill(connected)
                     }
-                    Box(Modifier.fillMaxWidth().height(3.dp).background(C.Orange))
+                    Box(Modifier.fillMaxWidth().height(3.dp).background(C.Glow))
                     vm.busy.value?.let {
                         LinearProgressIndicator(Modifier.fillMaxWidth(), color = C.Orange, trackColor = C.Card2)
                         Text(it, color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(start = 16.dp, top = 4.dp))
