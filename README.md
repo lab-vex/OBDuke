@@ -41,7 +41,7 @@ OBDuke/
 Every push to GitHub builds everything automatically:
 
 - **Latest build:** repo **Actions** tab → newest *Build* run → **Artifacts** at the bottom: `obduke-app` (the APK) and `obduke-firmware`.
-- **Releases:** bump `versionName` in `android/app/build.gradle.kts`, push, and wait for a green Build. Then publish a release on GitHub (**Releases → Draft a new release**, new tag `v<versionName>` on `main`). The APK and firmware are attached to the release automatically, and the download links above pick them up.
+- **Releases:** bump `versionName` in `android/app/build.gradle.kts` and push to `main`. When the Build goes green it publishes release `v<versionName>` by itself, with the APK and firmware attached, and the download links above and the app's updater pick it up. Pushes that don't change `versionName` don't make a release. (Publishing a release by hand with a matching tag still works too.)
 
 Firmware files:
 - `obduke-firmware-full.bin`: flash at address `0x0` with any ESP flasher (e.g. the Espressif web flasher or `esptool.py write_flash 0x0 obduke-firmware-full.bin`). Includes the Huge APP partition table.
@@ -128,7 +128,7 @@ Requires Android 8 or newer.
 **Updates:** on launch the app checks this repo's latest GitHub Release and offers to update if it's newer (turn this off, or tap *Check now*, in **App updates** on the Connect screen or the Settings tab). It downloads `obduke-app.apk` from the release and opens Android's installer; the first time, Android asks you to allow OBDuke to install apps.
 
 - If the repo is ever made private, the app needs a fine-grained GitHub token with **Contents: Read-only** on this repo, pasted into *App updates > GitHub token*.
-- To publish an update: bump `versionName` in `android/app/build.gradle.kts`, push, wait for a green Build, then publish a GitHub Release with tag `v<versionName>`. The release build refuses a tag that doesn't match `versionName`.
+- To publish an update: bump `versionName` in `android/app/build.gradle.kts` and push to `main`. A green Build publishes the release automatically. A hand-made release tag must match `versionName`.
 - Release builds are signed with a permanent key kept in the repo secrets `OBDUKE_KEYSTORE_B64` and `OBDUKE_KEYSTORE_PASSWORD` (keep your own backup of it: if it's lost, every install has to be uninstalled once). A release tag fails to build if those secrets are missing. Anything installed before that (1.2.0 or older) was signed with a throwaway key, so uninstall it once and install 1.2.1 from Releases; from then on it updates itself.
 
 Password fields have an eye button to show what you've typed.
